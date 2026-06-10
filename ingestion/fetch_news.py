@@ -39,7 +39,12 @@ QUERIES = [
     "tech layoffs unemployment",
     "AI fear jobs workforce",
     "automation workers economy",
+    "Anthropic IPO valuation",
+    "OpenAI IPO valuation",
+    "SpaceX IPO valuation",
+    "tech IPO market Anthropic OpenAI SpaceX"
 ]
+
 
 
 def fetch_headlines(query: str, from_date: str, to_date: str) -> list[dict]:

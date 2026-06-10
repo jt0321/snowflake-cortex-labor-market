@@ -2,16 +2,18 @@
 
 **Do the numbers back up the fear?**
 
-An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI to investigate whether public anxiety about AI-driven job displacement is supported by actual economic data. Monthly BLS and FRED figures are joined with a news corpus, then analyzed using six Cortex AI functions to surface correlations, classify sentiment, and generate narrative digests — all surfaced in a Streamlit in Snowflake dashboard.
+An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI to investigate whether public anxiety about AI-driven job displacement is supported by actual economic data. Monthly BLS and FRED figures are joined with tech layoffs, stock market proxies, and news sentiment, then analyzed using Cortex AI functions to surface correlations, classify sentiment, and generate narrative digests — all surfaced in a Streamlit in Snowflake dashboard.
 
 ---
 
 ## What it does
 
 - Ingests monthly labor data from the **BLS** (JOLTS layoffs by industry, CPS unemployment) and **FRED** (nonfarm payrolls, initial claims)
-- Pulls news headlines matching AI + job-loss query terms from **NewsAPI**
-- Runs the full corpus through **Snowflake Cortex AI** functions to classify, filter, embed, aggregate, and narrate
-- Exposes findings in a **Streamlit in Snowflake** dashboard with four analytical views
+- Scrapes tech industry layoffs directly from **Layoffs.fyi** (via Airtable shared view parsing)
+- Fetches daily stock closing prices for AI/tech proxies (**MSFT**, **GOOGL**, **AMZN**, **TSLA**, and **QQQ**) from **Yahoo Finance**
+- Pulls news headlines matching AI, job-loss, and tech IPO targets (**OpenAI**, **Anthropic**, **SpaceX**) from **NewsAPI**
+- Runs the corpus through **Snowflake Cortex AI** functions to classify, filter, embed, aggregate, and narrate
+- Exposes findings in a **Streamlit in Snowflake** dashboard with five analytical views
 
 ---
 
@@ -19,11 +21,11 @@ An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI
 
 | Function | Application |
 |---|---|
-| `AI_CLASSIFY` | Labels each headline: `layoff`, `hiring`, `ai_fear`, `ai_positive`, `policy`, `neutral` |
-| `AI_FILTER` | Boolean flag — is AI cited as a causal factor in job losses? |
+| `AI_CLASSIFY` | Labels each headline (e.g. `layoff`, `hiring`, `ai_fear`, `ipo_optimism`, `valuation_hype`) |
+| `AI_FILTER` | Boolean flags — does the article cite AI for job loss, or discuss IPO/private valuations? |
 | `AI_EMBED` | Vectorizes headlines using Arctic Embed for semantic similarity |
 | `AI_AGG` | Rolls up monthly headline themes with no context-window limit |
-| `AI_COMPLETE` | Generates a 3-sentence economic digest per month from structured + unstructured data |
+| `AI_COMPLETE` | Generates a monthly economic digest and IPO market narrative from structured + unstructured data |
 | Cortex Search | Powers natural-language headline search in the dashboard |
 
 ---
@@ -31,45 +33,54 @@ An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI
 ## Architecture
 
 ```
-[BLS API]       [FRED API]      [NewsAPI]
-     │                │               │
-     ▼                ▼               ▼
-fetch_econ.py                  fetch_news.py
-     │                               │
-     └──────────────┬────────────────┘
-                    │
-          LABOR_MARKET.RAW (Snowflake)
-          ├── RAW_BLS_JOLTS
-          ├── RAW_BLS_CPS
-          ├── RAW_FRED_SERIES
-          └── RAW_NEWS_HEADLINES
-                    │
-          sql/02_cortex_transforms.sql
-                    │
-          LABOR_MARKET.CORTEX
-          ├── NEWS_CLASSIFIED        (AI_CLASSIFY + AI_FILTER)
-          ├── NEWS_EMBEDDINGS        (AI_EMBED)
-          ├── MONTHLY_SENTIMENT_THEMES  (AI_AGG)
-          ├── MONTHLY_DIGEST         (AI_COMPLETE)
-          └── HEADLINE_SEARCH        (Cortex Search service)
-                    │
-          Streamlit in Snowflake
-          ├── Fear vs. Reality       (time-series + correlation)
-          ├── Monthly Digest         (AI-generated narrative)
-          ├── Semantic Search        (Cortex Search)
-          └── Sector Breakdown       (BLS JOLTS by industry)
+[BLS API]       [FRED API]      [NewsAPI]      [Layoffs.fyi]      [Yahoo Finance]
+     │                │               │              │                  │
+     ▼                ▼               ▼              ▼                  ▼
+fetch_econ.py                  fetch_news.py   fetch_layoffs.py    fetch_stocks.py
+     │                               │               │                  │
+     └───────────────────────────────┼───────────────┴──────────────────┘
+                                     │
+                        LABOR_MARKET.RAW (Snowflake)
+                        ├── RAW_BLS_JOLTS
+                        ├── RAW_BLS_CPS
+                        ├── RAW_FRED_SERIES
+                        ├── RAW_NEWS_HEADLINES
+                        ├── RAW_LAYOFFS_FYI
+                        └── RAW_STOCK_PRICES
+                                     │
+                        sql/02_cortex_transforms.sql
+                        sql/03_ipo_market_transforms.sql
+                                     │
+                        LABOR_MARKET.CORTEX
+                        ├── NEWS_CLASSIFIED            (AI_CLASSIFY + AI_FILTER)
+                        ├── NEWS_EMBEDDINGS            (AI_EMBED)
+                        ├── NEWS_IPO_CLASSIFIED        (AI_CLASSIFY + AI_FILTER)
+                        ├── MONTHLY_SENTIMENT_THEMES  (AI_AGG)
+                        ├── MONTHLY_IPO_SENTIMENT      (AI_AGG)
+                        ├── MONTHLY_DIGEST             (AI_COMPLETE)
+                        ├── MONTHLY_INTEGRATED_DIGEST  (AI_COMPLETE)
+                        └── HEADLINE_SEARCH            (Cortex Search service)
+                                     │
+                        Streamlit in Snowflake
+                        ├── Fear vs. Reality           (BLS vs. Layoffs.fyi + correlations)
+                        ├── Monthly Digests            (macro vs. tech-integrated narrative)
+                        ├── Semantic Search            (Cortex Search)
+                        ├── Sector Breakdown           (JOLTS sectors + tech stages)
+                        └── IPO & Tech Stocks          (Tech stock prices + IPO news)
 ```
 
 ---
 
 ## Data sources
 
-| Source | Series | Description |
+| Source | Series / Target | Description |
 |---|---|---|
 | BLS JOLTS | `JTS*LAY` | Monthly layoffs and discharges by industry |
 | BLS CPS | `LNS14000000`, `LNS11300000` | Unemployment rate, labor force participation |
 | FRED | `UNRATE`, `PAYEMS`, `ICSA` | Unemployment, nonfarm payrolls, initial claims |
-| NewsAPI | Various | Headlines matching AI + labor market query terms |
+| NewsAPI | Various | Headlines matching AI + labor market + IPO targets |
+| Layoffs.fyi | Airtable view | Specific tech company layoff dates and employee counts |
+| Yahoo Finance | MSFT, GOOGL, AMZN, TSLA, QQQ | Tech proxies and index daily close prices |
 
 ---
 
@@ -81,10 +92,10 @@ Run in order in a Snowflake worksheet:
 
 ```sql
 sql/00_setup.sql      -- database, schemas, warehouse, stages
-sql/01_raw_tables.sql -- raw layer DDL
+sql/01_raw_tables.sql -- raw layer DDL (including layoffs & stocks)
 ```
 
-### 2. Ingest economic data
+### 2. Ingest data
 
 ```bash
 pip install snowflake-connector-python pandas requests
@@ -94,32 +105,33 @@ export SNOWFLAKE_USER=...
 export SNOWFLAKE_PASSWORD=...
 export BLS_API_KEY=...    # register free at bls.gov
 export FRED_API_KEY=...   # register free at fred.stlouisfed.org
-
-python ingestion/fetch_econ.py
-```
-
-### 3. Ingest news headlines
-
-```bash
 export NEWS_API_KEY=...   # newsapi.org — free tier covers last 30 days
 
-# Default: last 30 days
-python ingestion/fetch_news.py
+# Ingest macro economy metrics
+python ingestion/fetch_econ.py
 
-# Historical range (paid/dev tier)
-python ingestion/fetch_news.py --from 2022-01-01 --to 2024-12-31
+# Ingest tech layoffs data
+python ingestion/fetch_layoffs.py
+
+# Ingest tech stock pricing histories
+python ingestion/fetch_stocks.py
+
+# Ingest news headlines
+python ingestion/fetch_news.py
 ```
 
-### 4. Run Cortex transforms
+### 3. Run Cortex transforms
+
+In a Snowflake worksheet, execute:
 
 ```sql
--- In a Snowflake worksheet:
 sql/02_cortex_transforms.sql
+sql/03_ipo_market_transforms.sql
 ```
 
-This creates all five Cortex AI-powered tables and the Cortex Search service. Expect it to take a few minutes on first run depending on corpus size.
+This builds all text classification, embedding, and narrative generation tables.
 
-### 5. Deploy the dashboard
+### 4. Deploy the dashboard
 
 In Snowflake → **Streamlit** → **+ Streamlit App**:
 - Paste contents of `streamlit/app.py`
@@ -129,27 +141,14 @@ In Snowflake → **Streamlit** → **+ Streamlit App**:
 
 ## Design notes
 
-**Why `AI_AGG` for monthly themes?**  
-A month of headlines easily exceeds the context window of a standard `AI_COMPLETE` call. `AI_AGG` handles arbitrarily large row sets natively — no chunking or batching logic required.
+**Why use tech proxies for private companies?**  
+OpenAI, Anthropic, and SpaceX are private. We use key public investor stocks (MSFT for OpenAI, GOOGL/AMZN for Anthropic) and related tech stock indicators (TSLA, QQQ) to serve as public market comparables and baseline indicators of valuation sentiment.
 
-**Why `AI_FILTER` alongside `AI_CLASSIFY`?**  
-Classification assigns a category label; `AI_FILTER` returns a boolean for use directly in `WHERE` clauses and `SUM()` aggregations. The combination makes it easy to compute the ratio of AI-causal headlines to total headlines per month, which is the core metric for the "Fear vs. Reality" view.
-
-**Why Cortex Search instead of manual vector cosine similarity?**  
-Cortex Search manages embedding generation, indexing, and ANN retrieval automatically. `AI_EMBED` is still demonstrated in `NEWS_EMBEDDINGS` to show the underlying mechanism, but the search UX uses the managed service.
-
----
-
-## Possible extensions
-
-- Add `GDELT` as a free news source with historical coverage back to 2013
-- Wire up **Cortex Analyst** with a semantic model for natural-language SQL over the labor data
-- Overlay FRED `USREC` recession indicator on the time-series charts
-- Automate ingestion + transforms via **Snowflake Tasks**
-- Expand sector coverage with additional BLS JOLTS series IDs
+**Why scrape the Airtable view for Layoffs.fyi?**  
+Layoffs.fyi is managed in an Airtable base. Since there is no public API key provided, we dynamically query their embed page, extract the dynamic view identifier (`viw*`), and fetch the raw CSV directly to ensure data fidelity.
 
 ---
 
 ## Stack
 
-Snowflake · Cortex AI · Streamlit in Snowflake · Python · BLS API · FRED API · NewsAPI
+Snowflake · Cortex AI · Streamlit in Snowflake · Python · BLS API · FRED API · NewsAPI · Yahoo Finance · Layoffs.fyi

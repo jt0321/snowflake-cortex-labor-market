@@ -46,3 +46,28 @@ CREATE TABLE IF NOT EXISTS RAW_NEWS_HEADLINES (
   full_text       VARCHAR,    -- title + description for Cortex input
   loaded_at       TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 );
+
+-- Tech layoffs from Layoffs.fyi
+CREATE TABLE IF NOT EXISTS RAW_LAYOFFS_FYI (
+  layoff_id        VARCHAR,   -- unique hash to prevent duplicates
+  company          VARCHAR,
+  location_hq      VARCHAR,
+  industry         VARCHAR,
+  laid_off_count   NUMBER,
+  percentage       FLOAT,
+  laid_off_date    DATE,
+  stage            VARCHAR,
+  funds_raised_m   FLOAT,
+  country          VARCHAR,
+  source_url       VARCHAR,
+  loaded_at        TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
+-- Stock prices (MSFT, GOOGL, AMZN, TSLA, QQQ)
+CREATE TABLE IF NOT EXISTS RAW_STOCK_PRICES (
+  ticker            VARCHAR,
+  observation_date  DATE,
+  close_val         FLOAT,
+  loaded_at         TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
