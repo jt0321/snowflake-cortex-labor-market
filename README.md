@@ -98,7 +98,8 @@ sql/01_raw_tables.sql -- raw layer DDL (including layoffs & stocks)
 ### 2. Ingest data
 
 ```bash
-pip install snowflake-connector-python pandas requests
+# Sync dependencies via uv
+uv sync
 
 export SNOWFLAKE_ACCOUNT=...
 export SNOWFLAKE_USER=...
@@ -108,16 +109,16 @@ export FRED_API_KEY=...   # register free at fred.stlouisfed.org
 export NEWS_API_KEY=...   # newsapi.org — free tier covers last 30 days
 
 # Ingest macro economy metrics
-python ingestion/fetch_econ.py
+uv run ingestion/fetch_econ.py
 
 # Ingest tech layoffs data
-python ingestion/fetch_layoffs.py
+uv run ingestion/fetch_layoffs.py
 
 # Ingest tech stock pricing histories
-python ingestion/fetch_stocks.py
+uv run ingestion/fetch_stocks.py
 
 # Ingest news headlines
-python ingestion/fetch_news.py
+uv run ingestion/fetch_news.py
 ```
 
 ### 3. Run Cortex transforms
