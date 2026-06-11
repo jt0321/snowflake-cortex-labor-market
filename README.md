@@ -2,6 +2,8 @@
 
 **Do the numbers back up the fear?**
 
+![Platform Architecture and Streamlit Dashboard](assets/system_architecture_dashboard.png)
+
 An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI to investigate whether public anxiety about AI-driven job displacement is supported by actual economic data. Monthly BLS and FRED figures are joined with tech layoffs, stock market proxies, and news sentiment, then analyzed using Cortex AI functions to surface correlations, classify sentiment, and generate narrative digests — all surfaced in a Streamlit in Snowflake dashboard.
 
 ---
