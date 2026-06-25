@@ -1,0 +1,46 @@
+name: labor_market
+version: "1.0.0"
+config-version: 2
+
+profile: labor_market
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  labor_market:
+    staging:
+      +materialized: view
+      +schema: CORTEX
+    marts:
+      +materialized: table
+      +schema: CORTEX
+      # Incremental Cortex AI models — only classify new rows
+      news_classified:
+        +materialized: incremental
+        +unique_key: article_id
+        +tags: ["daily", "cortex"]
+      news_embeddings:
+        +materialized: incremental
+        +unique_key: article_id
+        +tags: ["daily", "cortex"]
+      news_ipo_classified:
+        +materialized: incremental
+        +unique_key: article_id
+        +tags: ["daily", "cortex"]
+      # Daily refresh — no Cortex AI cost
+      layoffs_fyi_clean:
+        +tags: ["daily"]
+      stock_monthly_performance:
+        +tags: ["daily"]
+      # Monthly — regenerate digests when new econ data arrives
+      monthly_sentiment_themes:
+        +tags: ["monthly"]
+      monthly_ipo_sentiment:
+        +tags: ["monthly"]
+      monthly_digest:
+        +tags: ["monthly"]
+      monthly_integrated_digest:
+        +tags: ["monthly"]

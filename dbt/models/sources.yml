@@ -1,0 +1,30 @@
+version: 2
+
+sources:
+  - name: raw
+    database: LABOR_MARKET
+    schema: RAW
+    tables:
+      - name: RAW_NEWS_HEADLINES
+        description: NewsAPI headlines — AI, labor market, IPO topics
+        columns:
+          - name: article_id
+            tests: [not_null, unique]
+      - name: RAW_STOCK_PRICES
+        description: Daily closing prices for MSFT, GOOGL, AMZN, TSLA, QQQ
+        columns:
+          - name: ticker
+            tests: [not_null]
+          - name: observation_date
+            tests: [not_null]
+      - name: RAW_LAYOFFS_FYI
+        description: Tech layoffs from Layoffs.fyi (Airtable scrape)
+        columns:
+          - name: layoff_id
+            tests: [not_null, unique]
+      - name: RAW_BLS_JOLTS
+        description: BLS JOLTS monthly layoffs by industry
+      - name: RAW_BLS_CPS
+        description: BLS CPS unemployment + labor force participation
+      - name: RAW_FRED_SERIES
+        description: FRED series — UNRATE, PAYEMS, ICSA

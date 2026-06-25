@@ -1,11 +1,22 @@
 [project]
 name = "snowflake-cortex-labor-market"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI & the Labor Market — Snowflake Cortex AI data platform"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
-    "pandas>=3.0.3",
-    "requests>=2.34.2",
-    "snowflake-connector-python>=4.6.0",
+    "pandas>=2.0",
+    "requests>=2.32",
+    "snowflake-connector-python>=3.12",
+    # dbt
+    "dbt-snowflake>=1.8",
+    # dagster
+    "dagster>=1.9",
+    "dagster-webserver>=1.9",
+    "dagster-dbt>=0.25",
+    "dagster-snowflake>=0.25",
+    "dagster-snowflake-pandas>=0.25",
 ]
+
+[tool.dagster]
+module_name = "dagster_project.definitions"
