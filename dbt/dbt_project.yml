@@ -40,6 +40,8 @@ models:
         +tags: ["monthly"]
       monthly_ipo_sentiment:
         +tags: ["monthly"]
+      monthly_prediction_market_sentiment:
+        +tags: ["daily"]
       monthly_digest:
         +tags: ["monthly"]
       monthly_integrated_digest:

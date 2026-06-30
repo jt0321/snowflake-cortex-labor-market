@@ -28,3 +28,10 @@ sources:
         description: BLS CPS unemployment + labor force participation
       - name: RAW_FRED_SERIES
         description: FRED series — UNRATE, PAYEMS, ICSA
+      - name: RAW_POLYMARKET_MARKETS
+        description: Daily snapshots of Polymarket implied probabilities for recession/unemployment/AI-jobs/IPO markets
+        columns:
+          - name: market_id
+            tests: [not_null]
+          - name: snapshot_date
+            tests: [not_null]

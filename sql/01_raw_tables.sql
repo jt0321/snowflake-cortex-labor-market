@@ -71,3 +71,16 @@ CREATE TABLE IF NOT EXISTS RAW_STOCK_PRICES (
   loaded_at         TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 );
 
+-- Polymarket prediction-market probabilities (recession, unemployment, AI jobs, IPOs)
+CREATE TABLE IF NOT EXISTS RAW_POLYMARKET_MARKETS (
+  market_id        VARCHAR,
+  question         VARCHAR,
+  outcome          VARCHAR,    -- e.g. 'Yes' / 'No'
+  probability      FLOAT,      -- implied probability, 0-1
+  volume           FLOAT,
+  liquidity        FLOAT,
+  end_date         DATE,
+  snapshot_date    DATE,       -- date this probability was captured
+  loaded_at        TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+);
+

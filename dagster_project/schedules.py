@@ -4,7 +4,7 @@ from dagster import (
     define_asset_job,
 )
 from dagster_project.assets.ingestion import (
-    raw_stock_prices, raw_layoffs_fyi, raw_news_headlines,
+    raw_stock_prices, raw_layoffs_fyi, raw_news_headlines, raw_polymarket_markets,
     raw_fred_icsa, raw_econ_monthly,
 )
 from dagster_project.assets.dbt_assets import (
@@ -17,7 +17,7 @@ from dagster_project.assets.dbt_assets import (
 daily_ingest_and_transform_job = define_asset_job(
     name="daily_ingest_and_transform",
     selection=AssetSelection.assets(
-        raw_stock_prices, raw_layoffs_fyi, raw_news_headlines,
+        raw_stock_prices, raw_layoffs_fyi, raw_news_headlines, raw_polymarket_markets,
     ) | AssetSelection.assets(daily_dbt_assets) | AssetSelection.assets(cortex_search_service),
 )
 

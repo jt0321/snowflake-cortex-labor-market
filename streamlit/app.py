@@ -113,6 +113,7 @@ with tab1:
           d.bls_total_layoffs_k,
           d.fyi_tech_layoffs,
           d.unemployment_rate,
+          d.recession_probability,
           COALESCE(m.ai_causal_count, 0) AS ai_causal_count
         FROM LABOR_MARKET.CORTEX.MONTHLY_INTEGRATED_DIGEST d
         LEFT JOIN LABOR_MARKET.CORTEX.MONTHLY_DIGEST m ON d.month = m.month
@@ -145,25 +146,32 @@ with tab1:
     st.divider()
     
     # Metrics row
-    m1, m2, m3 = st.columns(3)
-    
+    m1, m2, m3, m4 = st.columns(4)
+
     # Calculate correlations
     corr_bls_vs_fyi = df_combined["BLS_TOTAL_LAYOFFS_K"].corr(df_combined["FYI_TECH_LAYOFFS"])
     corr_fyi_vs_news = df_combined["FYI_TECH_LAYOFFS"].corr(df_combined["AI_CAUSAL_COUNT"])
-    
+
     m1.metric(
-        "BLS vs. Tech Layoffs Correlation", 
+        "BLS vs. Tech Layoffs Correlation",
         f"{corr_bls_vs_fyi:.2f}",
         help="Correlation between general U.S. layoffs (BLS JOLTS) and tech layoffs (Layoffs.fyi). A high value indicates tech moves in lockstep with the broader market."
     )
     m2.metric(
-        "Tech Layoffs vs. AI News Correlation", 
+        "Tech Layoffs vs. AI News Correlation",
         f"{corr_fyi_vs_news:.2f}",
         help="Correlation between tech layoffs and news articles blaming AI for job cuts. High correlation suggests news volume tracks actual tech layoffs."
     )
-    
+
     unrate_latest = df_combined["UNEMPLOYMENT_RATE"].iloc[-1] if not df_combined.empty else 0.0
     m3.metric("Latest Unemployment Rate", f"{unrate_latest:.1f}%")
+
+    recession_prob = df_combined["RECESSION_PROBABILITY"].dropna()
+    m4.metric(
+        "Polymarket Recession Odds",
+        f"{recession_prob.iloc[-1] * 100:.0f}%" if not recession_prob.empty else "N/A",
+        help="Latest monthly average implied probability of a recession, from Polymarket prediction markets — a market-priced fear signal distinct from news sentiment."
+    )
 
 
 # ── Tab 2: Monthly Digests ──────────────────────────────────────────────────
@@ -349,7 +357,28 @@ with tab5:
         st.caption("Normalized price performance (%) of tech proxies over the entire period, relative to the starting date.")
         
     st.divider()
-    
+
+    # Prediction market sentiment
+    st.markdown("### Prediction Market Odds (Polymarket)")
+    st.caption(
+        "Implied probability — what people are betting money on — for recession, unemployment, "
+        "AI-jobs, and IPO-related questions. A market-priced complement to news sentiment."
+    )
+    pm_df = session.sql("""
+        SELECT month, market_category, avg_probability
+        FROM LABOR_MARKET.CORTEX.MONTHLY_PREDICTION_MARKET_SENTIMENT
+        ORDER BY month
+    """).to_pandas()
+
+    if pm_df.empty:
+        st.caption("No Polymarket data loaded yet. Run fetch_polymarket.py.")
+    else:
+        pm_df["MONTH"] = pd.to_datetime(pm_df["MONTH"])
+        pm_pivot = pm_df.pivot_table(index="MONTH", columns="MARKET_CATEGORY", values="AVG_PROBABILITY")
+        st.line_chart(pm_pivot, use_container_width=True)
+
+    st.divider()
+
     # IPO news section
     col_news_left, col_news_right = st.columns([1, 2])
     

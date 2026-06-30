@@ -36,6 +36,17 @@ stocks as (
 news as (
     select month, ipo_theme_summary, ipo_headline_count, ipo_flag_count
     from {{ ref('monthly_ipo_sentiment') }}
+),
+prediction_markets as (
+    select
+        month,
+        max(case when market_category = 'recession'     then avg_probability end) as recession_probability,
+        max(case when market_category = 'unemployment'  then avg_probability end) as unemployment_market_probability,
+        max(case when market_category = 'ai_jobs'        then avg_probability end) as ai_jobs_market_probability,
+        max(case when market_category in ('openai_ipo', 'anthropic_ipo', 'spacex_ipo')
+                  then avg_probability end)                                        as ipo_market_probability
+    from {{ ref('monthly_prediction_market_sentiment') }}
+    group by 1
 )
 select
     e.month,
@@ -52,6 +63,10 @@ select
     n.ipo_theme_summary,
     coalesce(n.ipo_headline_count, 0)    as ipo_headline_count,
     coalesce(n.ipo_flag_count, 0)        as ipo_flag_count,
+    p.recession_probability,
+    p.unemployment_market_probability,
+    p.ai_jobs_market_probability,
+    p.ipo_market_probability,
     AI_COMPLETE(
         'mistral-7b',
         concat(
@@ -64,11 +79,14 @@ select
             'MSFT (OpenAI proxy) return is ', coalesce(round(s.msft_return, 1)::varchar, 'N/A'), '%. ',
             'IPO headlines (', coalesce(n.ipo_headline_count::varchar, '0'), ' total): ',
             coalesce(n.ipo_theme_summary, 'No news on Anthropic, OpenAI, or SpaceX IPOs.'), ' ',
-            'Synthesize how tech stock trends and private company valuation/IPO news relate to labor layoffs this month.'
+            'Prediction markets: Polymarket implies a ', coalesce(round(p.recession_probability * 100, 0)::varchar, 'N/A'), '% chance of recession, ',
+            'and a ', coalesce(round(p.ai_jobs_market_probability * 100, 0)::varchar, 'N/A'), '% probability on AI-jobs-related questions this month. ',
+            'Synthesize how tech stock trends, IPO/valuation news, and prediction-market odds relate to actual labor layoffs this month.'
         )
     ) as ipo_market_digest
 from econ e
-left join bls_layoffs l on e.month = l.month
-left join fyi_layoffs f on e.month = f.month
-left join stocks      s on e.month = s.month
-left join news        n on e.month = n.month
+left join bls_layoffs        l on e.month = l.month
+left join fyi_layoffs        f on e.month = f.month
+left join stocks             s on e.month = s.month
+left join news                n on e.month = n.month
+left join prediction_markets p on e.month = p.month

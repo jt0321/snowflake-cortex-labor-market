@@ -14,6 +14,7 @@ import fetch_econ
 import fetch_layoffs
 import fetch_stocks
 import fetch_news
+import fetch_polymarket
 
 
 # ── Daily ──────────────────────────────────────────────────────────────────
@@ -46,6 +47,16 @@ def raw_layoffs_fyi(context: AssetExecutionContext) -> None:
 def raw_news_headlines(context: AssetExecutionContext) -> None:
     fetch_news.main()
     context.log.info("raw_news_headlines ingestion complete")
+
+
+@asset(
+    group_name="ingestion_daily",
+    description="Polymarket implied probabilities for recession/unemployment/AI-jobs/IPO markets",
+    tags={"schedule": "daily"},
+)
+def raw_polymarket_markets(context: AssetExecutionContext) -> None:
+    fetch_polymarket.main()
+    context.log.info("raw_polymarket_markets ingestion complete")
 
 
 # ── Weekly (Thursday — ICSA initial claims drop weekly) ───────────────────
