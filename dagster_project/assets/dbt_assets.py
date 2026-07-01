@@ -8,7 +8,7 @@ Three dbt asset groups mirror the schedule cadence:
 """
 import snowflake.connector
 from dagster import asset, AssetExecutionContext, AssetKey
-from dagster_dbt import DbtCliResource, dbt_assets
+from dagster_dbt import DbtCliResource, DagsterDbtTranslator, dbt_assets
 
 from dagster_project.resources import dbt_project, SNOWFLAKE_CONFIG
 from dagster_project.assets.ingestion import (
@@ -17,11 +17,22 @@ from dagster_project.assets.ingestion import (
 )
 
 
+class _StaticGroupTranslator(DagsterDbtTranslator):
+    """Assigns every asset in a dbt_assets group to one fixed Dagster group name."""
+
+    def __init__(self, group_name: str):
+        self._group_name = group_name
+        super().__init__()
+
+    def get_group_name(self, dbt_resource_props):
+        return self._group_name
+
+
 @dbt_assets(
     manifest=dbt_project.manifest_path,
     select="tag:daily",
     name="daily_dbt_assets",
-    group_name="transforms_daily",
+    dagster_dbt_translator=_StaticGroupTranslator("transforms_daily"),
 )
 def daily_dbt_assets(context: AssetExecutionContext, dbt: DbtCliResource):
     yield from dbt.cli(["run", "--select", "tag:daily"], context=context).stream()
@@ -31,7 +42,7 @@ def daily_dbt_assets(context: AssetExecutionContext, dbt: DbtCliResource):
     manifest=dbt_project.manifest_path,
     select="tag:monthly",
     name="monthly_dbt_assets",
-    group_name="transforms_monthly",
+    dagster_dbt_translator=_StaticGroupTranslator("transforms_monthly"),
 )
 def monthly_dbt_assets(context: AssetExecutionContext, dbt: DbtCliResource):
     yield from dbt.cli(["run", "--select", "tag:monthly"], context=context).stream()

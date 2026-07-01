@@ -130,6 +130,7 @@ sql/01_raw_tables.sql -- raw layer DDL (all 7 RAW tables, including Polymarket)
 ```bash
 uv sync
 
+# .env (loaded automatically by dbt-snowflake and Dagster)
 export SNOWFLAKE_ACCOUNT=...
 export SNOWFLAKE_USER=...
 export SNOWFLAKE_PASSWORD=...
@@ -139,11 +140,13 @@ export FRED_API_KEY=...   # register free at fred.stlouisfed.org
 export NEWS_API_KEY=...   # newsapi.org — free tier covers last 30 days
 ```
 
+All commands below run through `uv run` so they use the project's pinned virtualenv (`.venv`) rather than any globally installed dbt/Dagster.
+
 ### 3a. Run via Dagster (recommended)
 
 ```bash
-dbt parse --project-dir dbt --profiles-dir dbt   # generates dbt/target/manifest.json
-dagster dev
+uv run dbt parse --project-dir dbt --profiles-dir dbt   # generates dbt/target/manifest.json
+uv run dagster dev -m dagster_project.definitions
 ```
 
 Open the Dagster UI, materialize assets manually for a first backfill, then let the three schedules (`daily_ingestion_and_transform`, `weekly_icsa_refresh`, `monthly_econ_and_digest`) take over.
@@ -157,7 +160,7 @@ uv run ingestion/fetch_stocks.py
 uv run ingestion/fetch_news.py
 uv run ingestion/fetch_polymarket.py
 
-cd dbt && dbt run --profiles-dir . && cd ..
+uv run dbt run --project-dir dbt --profiles-dir dbt
 ```
 
 ### 4. Deploy the dashboard
