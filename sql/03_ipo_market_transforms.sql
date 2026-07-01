@@ -1,3 +1,5 @@
+-- IPO market transform layer with AI classification, filtering, and digest generation
+-- Co-authored with CoCo
 -- ============================================================
 -- 03_ipo_market_transforms.sql — Ingestion transform layer
 -- Run after RAW_LAYOFFS_FYI and RAW_STOCK_PRICES are loaded.
@@ -21,7 +23,7 @@ SELECT
   country,
   source_url
 FROM LABOR_MARKET.RAW.RAW_LAYOFFS_FYI
-WHERE laid_off_date >= '2020-01-01';
+WHERE laid_off_date >= '2022-01-01';
 
 -- ----------------------------------------------------------
 -- Step 2: Compute monthly stock closing prices and returns
@@ -80,10 +82,9 @@ SELECT
   AI_CLASSIFY(
     full_text,
     ['ipo_optimism', 'ipo_pessimism', 'valuation_hype', 'layoff_fear', 'neutral']
-  ) AS category,
+  ):labels[0]::VARCHAR AS category,
   AI_FILTER(
-    full_text,
-    'The article mentions valuations, private funding rounds, investments, or discussions about an IPO or secondary sale'
+    PROMPT('The article mentions valuations, private funding rounds, investments, or discussions about an IPO or secondary sale: {0}', full_text)
   ) AS ipo_flag
 FROM LABOR_MARKET.RAW.RAW_NEWS_HEADLINES
 WHERE published_at >= '2020-01-01'
@@ -102,8 +103,7 @@ SELECT
   DATE_TRUNC('month', published_at)::DATE AS month,
   AI_AGG(
     full_text,
-    'Summarize the monthly sentiment, valuation rumors, and IPO discussion trends regarding OpenAI, Anthropic, and SpaceX. '
-    'Highlight key themes like optimism, pessimism, private funding rounds, or valuation changes. Be extremely concise.'
+    'Summarize the monthly sentiment, valuation rumors, and IPO discussion trends regarding OpenAI, Anthropic, and SpaceX. Highlight key themes like optimism, pessimism, private funding rounds, or valuation changes. Be extremely concise.'
   ) AS ipo_theme_summary,
   COUNT(*) AS ipo_headline_count,
   SUM(ipo_flag::INT) AS ipo_flag_count
