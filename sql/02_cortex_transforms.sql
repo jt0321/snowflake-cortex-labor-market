@@ -1,3 +1,5 @@
+-- Cortex AI transformation layer for labor market news classification and analysis
+-- Co-authored with CoCo
 -- ============================================================
 -- 02_cortex_transforms.sql — Cortex AI transformation layer
 -- Run after raw tables are populated.
@@ -17,13 +19,12 @@ SELECT
   AI_CLASSIFY(
     full_text,
     ['layoff', 'hiring', 'ai_fear', 'ai_positive', 'policy', 'neutral']
-  ) AS category,
+  ):labels[0]::VARCHAR AS category,
   AI_FILTER(
-    full_text,
-    'The article mentions artificial intelligence, automation, or machine learning as a contributing factor to job losses, layoffs, or unemployment'
+    PROMPT('The article mentions artificial intelligence, automation, or machine learning as a contributing factor to job losses, layoffs, or unemployment: {0}', full_text)
   ) AS ai_causal_flag
 FROM LABOR_MARKET.RAW.RAW_NEWS_HEADLINES
-WHERE published_at >= '2020-01-01';
+WHERE published_at >= '2022-01-01';
 
 -- ----------------------------------------------------------
 -- Step 2: Embed headlines for semantic search
@@ -46,9 +47,7 @@ SELECT
   DATE_TRUNC('month', published_at)::DATE AS month,
   AI_AGG(
     full_text,
-    'Identify the 3-5 dominant themes in these news headlines about jobs, employment, and AI. '
-    'For each theme, note whether it suggests AI is causing displacement, creating opportunity, '
-    'or is unrelated to employment outcomes. Be concise.'
+    'Identify the 3-5 dominant themes in these news headlines about jobs, employment, and AI. For each theme, note whether it suggests AI is causing displacement, creating opportunity, or is unrelated to employment outcomes. Be concise.'
   ) AS theme_summary,
   COUNT(*)                        AS headline_count,
   SUM(ai_causal_flag::INT)        AS ai_causal_count
