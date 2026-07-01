@@ -17,13 +17,14 @@ import snowflake.connector
 
 # ── Config ─────────────────────────────────────────────────────────────────
 SF = dict(
-    account   = os.environ["SNOWFLAKE_ACCOUNT"],
-    user      = os.environ["SNOWFLAKE_USER"],
-    password  = os.environ["SNOWFLAKE_PASSWORD"],
-    role      = os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
-    warehouse = "LABOR_WH",
-    database  = "LABOR_MARKET",
-    schema    = "RAW",
+    account       = os.environ["SNOWFLAKE_ACCOUNT"],
+    user          = os.environ["SNOWFLAKE_USER"],
+    authenticator = "PROGRAMMATIC_ACCESS_TOKEN",
+    token         = os.environ["SNOWFLAKE_TOKEN"],
+    role          = os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
+    warehouse     = "LABOR_WH",
+    database      = "LABOR_MARKET",
+    schema        = "RAW",
 )
 
 EMBED_URL = "https://airtable.com/embed/app1PaujS9zxVGUZ4/shroKsHx3SdYYOzeh?backgroundColor=green&viewControls=on"

@@ -16,7 +16,7 @@ Usage:
     python fetch_polymarket.py
 
 Environment variables required:
-    SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD, SNOWFLAKE_ROLE
+    SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_TOKEN, SNOWFLAKE_ROLE
 """
 
 import os
@@ -28,13 +28,14 @@ import snowflake.connector
 
 # ── Config ─────────────────────────────────────────────────────────────────
 SF = dict(
-    account   = os.environ["SNOWFLAKE_ACCOUNT"],
-    user      = os.environ["SNOWFLAKE_USER"],
-    password  = os.environ["SNOWFLAKE_PASSWORD"],
-    role      = os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
-    warehouse = "LABOR_WH",
-    database  = "LABOR_MARKET",
-    schema    = "RAW",
+    account       = os.environ["SNOWFLAKE_ACCOUNT"],
+    user          = os.environ["SNOWFLAKE_USER"],
+    authenticator = "PROGRAMMATIC_ACCESS_TOKEN",
+    token         = os.environ["SNOWFLAKE_TOKEN"],
+    role          = os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
+    warehouse     = "LABOR_WH",
+    database      = "LABOR_MARKET",
+    schema        = "RAW",
 )
 
 GAMMA_API = "https://gamma-api.polymarket.com/markets"

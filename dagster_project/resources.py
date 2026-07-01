@@ -10,11 +10,12 @@ dbt_project.prepare_if_dev()  # generates target/manifest.json in local dev
 dbt_resource = DbtCliResource(project_dir=dbt_project)
 
 SNOWFLAKE_CONFIG = {
-    "account":   os.environ["SNOWFLAKE_ACCOUNT"],
-    "user":      os.environ["SNOWFLAKE_USER"],
-    "password":  os.environ["SNOWFLAKE_PASSWORD"],
-    "role":      os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
-    "warehouse": "LABOR_WH",
-    "database":  "LABOR_MARKET",
-    "schema":    "RAW",
+    "account":       os.environ["SNOWFLAKE_ACCOUNT"],
+    "user":          os.environ["SNOWFLAKE_USER"],
+    "authenticator": "PROGRAMMATIC_ACCESS_TOKEN",
+    "token":         os.environ["SNOWFLAKE_TOKEN"],
+    "role":          os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
+    "warehouse":     "LABOR_WH",
+    "database":      "LABOR_MARKET",
+    "schema":        "RAW",
 }

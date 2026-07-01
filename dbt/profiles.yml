@@ -5,7 +5,9 @@ labor_market:
       type: snowflake
       account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
       user: "{{ env_var('SNOWFLAKE_USER') }}"
-      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      # dbt-snowflake (1.11.6) only forwards the `token` field to the connector
+      # for authenticator: oauth/jwt, so a PAT must go in `password` instead.
+      password: "{{ env_var('SNOWFLAKE_TOKEN') }}"
       role: "{{ env_var('SNOWFLAKE_ROLE', 'SYSADMIN') }}"
       database: LABOR_MARKET
       warehouse: LABOR_WH

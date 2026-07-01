@@ -6,7 +6,7 @@ Usage:
     python fetch_econ.py
 
 Environment variables required:
-    SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD, SNOWFLAKE_ROLE
+    SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_TOKEN, SNOWFLAKE_ROLE
     BLS_API_KEY   (optional but recommended — raises rate limit)
     FRED_API_KEY  (free at https://fred.stlouisfed.org/docs/api/api_key.html)
 """
@@ -23,13 +23,14 @@ import snowflake.connector
 BLS_API_KEY  = os.getenv("BLS_API_KEY", "")
 FRED_API_KEY = os.getenv("FRED_API_KEY")
 SF = dict(
-    account   = os.environ["SNOWFLAKE_ACCOUNT"],
-    user      = os.environ["SNOWFLAKE_USER"],
-    password  = os.environ["SNOWFLAKE_PASSWORD"],
-    role      = os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
-    warehouse = "LABOR_WH",
-    database  = "LABOR_MARKET",
-    schema    = "RAW",
+    account       = os.environ["SNOWFLAKE_ACCOUNT"],
+    user          = os.environ["SNOWFLAKE_USER"],
+    authenticator = "PROGRAMMATIC_ACCESS_TOKEN",
+    token         = os.environ["SNOWFLAKE_TOKEN"],
+    role          = os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
+    warehouse     = "LABOR_WH",
+    database      = "LABOR_MARKET",
+    schema        = "RAW",
 )
 
 # BLS series IDs

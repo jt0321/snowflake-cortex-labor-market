@@ -10,7 +10,7 @@ Usage:
 
 Environment variables:
     NEWS_API_KEY          (https://newsapi.org)
-    SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD, SNOWFLAKE_ROLE
+    SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_TOKEN, SNOWFLAKE_ROLE
 """
 
 import os
@@ -23,13 +23,14 @@ import snowflake.connector
 
 NEWS_API_KEY = os.environ["NEWS_API_KEY"]
 SF = dict(
-    account   = os.environ["SNOWFLAKE_ACCOUNT"],
-    user      = os.environ["SNOWFLAKE_USER"],
-    password  = os.environ["SNOWFLAKE_PASSWORD"],
-    role      = os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
-    warehouse = "LABOR_WH",
-    database  = "LABOR_MARKET",
-    schema    = "RAW",
+    account       = os.environ["SNOWFLAKE_ACCOUNT"],
+    user          = os.environ["SNOWFLAKE_USER"],
+    authenticator = "PROGRAMMATIC_ACCESS_TOKEN",
+    token         = os.environ["SNOWFLAKE_TOKEN"],
+    role          = os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
+    warehouse     = "LABOR_WH",
+    database      = "LABOR_MARKET",
+    schema        = "RAW",
 )
 
 # Query clusters — run each separately to maximize coverage
