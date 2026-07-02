@@ -116,14 +116,18 @@ No API key is required for Yahoo Finance, Layoffs.fyi, or Polymarket's Gamma API
 
 ## Setup
 
+**Sign up for a Snowflake trial first, if you don't already have an account.** As of writing, [Snowflake's trial signup](https://www.snowflake.com/en/snowflake-trial/) offers two options — to get Cortex AI access (which this whole project depends on), you must pick the **"Cortex Cloud CLI"** trial, not the plain one. It reserves $40 of Cortex inference credit out of the $400 total trial credit; the plain trial doesn't include Cortex access at all.
+
 ### 1. Snowflake environment
 
-Run in order in a Snowflake worksheet:
+Add the `sql/` folder to a Snowflake **Workspace** (Projects → Workspaces) and run these two files in order — this is schema/table DDL only, no data yet:
 
 ```sql
 sql/00_setup.sql      -- database, schemas, warehouse, stages
 sql/01_raw_tables.sql -- raw layer DDL (all 7 RAW tables, including Polymarket)
 ```
+
+`sql/02_cortex_transforms.sql` and `sql/03_ipo_market_transforms.sql` are also in that folder — see step 3 below for when (and when *not*) to run them.
 
 ### 2. Configure environment
 
@@ -151,7 +155,24 @@ cp .env.example .env
 
 All commands below run through `uv run` so they use the project's pinned virtualenv (`.venv`) rather than any globally installed dbt/Dagster.
 
-### 3a. Run via Dagster (recommended)
+### 3. Cortex AI smoke test (optional, one-time)
+
+`sql/02_cortex_transforms.sql` and `sql/03_ipo_market_transforms.sql` are a standalone, pre-dbt reference implementation of the same `AI_CLASSIFY`/`AI_FILTER`/`AI_EMBED`/`AI_AGG` transforms dbt owns from step 4 onward. They're useful as a quick end-to-end check that Cortex actually works on your account/trial, without setting up dbt or Dagster first:
+
+```bash
+# seed RAW with a first batch of real data
+uv run ingestion/fetch_econ.py
+uv run ingestion/fetch_layoffs.py
+uv run ingestion/fetch_stocks.py
+uv run ingestion/fetch_news.py
+uv run ingestion/fetch_polymarket.py
+```
+
+Then run `sql/02_cortex_transforms.sql` and `sql/03_ipo_market_transforms.sql` in the Workspace (each needs the RAW tables above already populated — that's why they run after ingestion, not with `00`/`01`).
+
+**Run this at most once, and never again after step 4.** Both scripts `CREATE OR REPLACE` tables — `NEWS_CLASSIFIED`, `LAYOFFS_FYI_CLEAN`, `MONTHLY_SENTIMENT_THEMES`, and six more — under the exact same names (Snowflake identifiers are case-insensitive) as the dbt models in `dbt/models/marts/`. Once dbt has run, it owns these tables incrementally, only reclassifying headlines it hasn't seen before; re-running the raw SQL scripts afterward silently wipes that incremental state and burns Cortex credits reclassifying the entire corpus from scratch on the next `dbt run`.
+
+### 4a. Run via Dagster (recommended)
 
 ```bash
 uv run dbt parse --project-dir dbt --profiles-dir dbt   # generates dbt/target/manifest.json
@@ -160,7 +181,7 @@ uv run dagster dev -m dagster_project.definitions
 
 Open the Dagster UI, materialize assets manually for a first backfill, then let the three schedules (`daily_ingestion_and_transform`, `weekly_icsa_refresh`, `monthly_econ_and_digest`) take over.
 
-### 3b. Run manually (no orchestrator)
+### 4b. Run manually (no orchestrator)
 
 ```bash
 uv run ingestion/fetch_econ.py
@@ -172,9 +193,10 @@ uv run ingestion/fetch_polymarket.py
 uv run dbt run --project-dir dbt --profiles-dir dbt
 ```
 
-### 4. Deploy the dashboard
+### 5. Deploy the dashboard
 
 In Snowflake → **Streamlit** → **+ Streamlit App**:
+- Switch your active role to `SYSADMIN` *before* creating the app — a Streamlit-in-Snowflake app runs as whichever role owns it, and `ACCOUNTADMIN` doesn't automatically inherit `SYSADMIN`'s privileges on `LABOR_MARKET.CORTEX` objects (they're peers, not parent/child). Creating it under the wrong role hits the same "no privileges on it" error as the `HEADLINE_SEARCH` issue above.
 - Paste contents of `streamlit/app.py`
 - Set database: `LABOR_MARKET`, warehouse: `LABOR_WH`
 
@@ -191,6 +213,11 @@ GRANT OWNERSHIP ON FUTURE TABLES IN SCHEMA LABOR_MARKET.RAW TO ROLE SYSADMIN COP
 GRANT OWNERSHIP ON ALL TABLES IN SCHEMA LABOR_MARKET.CORTEX TO ROLE SYSADMIN COPY CURRENT GRANTS;
 GRANT OWNERSHIP ON FUTURE TABLES IN SCHEMA LABOR_MARKET.CORTEX TO ROLE SYSADMIN COPY CURRENT GRANTS;
 GRANT OWNERSHIP ON WAREHOUSE LABOR_WH TO ROLE SYSADMIN COPY CURRENT GRANTS;
+```
+The same applies to the Cortex Search service (`cortex_search_service` in `dagster_project/assets/dbt_assets.py` runs `CREATE OR REPLACE CORTEX SEARCH SERVICE` directly, outside dbt) — if it was ever created under a different role, `COPY CURRENT GRANTS` ownership transfer isn't guaranteed to carry over cleanly for search services, so the simplest fix is to drop it and let the next run recreate it fresh under SYSADMIN:
+```sql
+USE ROLE ACCOUNTADMIN;
+DROP CORTEX SEARCH SERVICE IF EXISTS LABOR_MARKET.CORTEX.HEADLINE_SEARCH;
 ```
 
 **dbt objects end up in a `CORTEX_CORTEX` schema instead of `CORTEX`**

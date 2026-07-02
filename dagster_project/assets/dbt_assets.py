@@ -41,7 +41,11 @@ def dbt_transforms(context: AssetExecutionContext, dbt: DbtCliResource):
 @asset(
     group_name="transforms_daily",
     description="Cortex Search service over classified headlines — recreated after embeddings refresh",
-    deps=[AssetKey(["LABOR_MARKET", "CORTEX", "news_embeddings"])],
+    # dbt's default asset-key fn keys models by name alone (no db/schema
+    # prefix) when the model has no `+schema` override configured — this must
+    # match that exactly, or Dagster treats it as a dangling dep and runs
+    # this asset without waiting for dbt_transforms to materialize it.
+    deps=[AssetKey(["news_embeddings"])],
     tags={"schedule": "daily"},
 )
 def cortex_search_service(context: AssetExecutionContext) -> None:

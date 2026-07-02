@@ -2,7 +2,7 @@ select
     date_trunc('month', published_at)::date as month,
     AI_AGG(
         full_text,
-        'Summarize the monthly sentiment, valuation rumors, and IPO discussion trends regarding OpenAI, Anthropic, and SpaceX. '
+        'Summarize the monthly sentiment, valuation rumors, and IPO discussion trends regarding OpenAI, Anthropic, and SpaceX. ' ||
         'Highlight key themes like optimism, pessimism, private funding rounds, or valuation changes. Be extremely concise.'
     )          as ipo_theme_summary,
     count(*)   as ipo_headline_count,

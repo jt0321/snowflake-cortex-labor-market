@@ -11,6 +11,8 @@ select
     full_text,
     published_at,
     category,
+    source_name,
+    ai_causal_flag,
     AI_EMBED('snowflake-arctic-embed-m-v1.5', full_text) as embedding
 from {{ ref('news_classified') }}
 

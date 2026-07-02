@@ -107,6 +107,11 @@ def fetch_fred(series_id: str, start: str = "2019-01-01") -> pd.DataFrame:
 # ── Snowflake load ──────────────────────────────────────────────────────────
 def load_to_snowflake(df: pd.DataFrame, table: str, conn) -> int:
     cursor = conn.cursor()
+    # NaN floats bind as an unquoted NAN literal, which Snowflake parses as an
+    # invalid identifier — convert to None so it binds as NULL instead.
+    # astype(object) first: .where() on a float64 column re-coerces None back
+    # to NaN, since a numpy float array has nowhere to put a Python None.
+    df = df.astype(object).where(pd.notnull(df), None)
     rows = [tuple(r) for r in df.itertuples(index=False)]
     placeholders = ", ".join(["%s"] * len(df.columns))
     sql = f"INSERT INTO {table} ({', '.join(df.columns)}) VALUES ({placeholders})"
