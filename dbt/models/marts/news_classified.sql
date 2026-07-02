@@ -14,10 +14,9 @@ select
     AI_CLASSIFY(
         full_text,
         ['layoff', 'hiring', 'ai_fear', 'ai_positive', 'policy', 'neutral']
-    ) as category,
+    ):labels[0]::VARCHAR as category,
     AI_FILTER(
-        full_text,
-        'The article mentions artificial intelligence, automation, or machine learning as a contributing factor to job losses, layoffs, or unemployment'
+        PROMPT('The article mentions artificial intelligence, automation, or machine learning as a contributing factor to job losses, layoffs, or unemployment: {0}', full_text)
     ) as ai_causal_flag
 from {{ ref('stg_news_headlines') }}
 

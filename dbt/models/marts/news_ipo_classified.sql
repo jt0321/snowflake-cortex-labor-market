@@ -20,10 +20,9 @@ select
     AI_CLASSIFY(
         full_text,
         ['ipo_optimism', 'ipo_pessimism', 'valuation_hype', 'layoff_fear', 'neutral']
-    ) as category,
+    ):labels[0]::VARCHAR as category,
     AI_FILTER(
-        full_text,
-        'The article mentions valuations, private funding rounds, investments, or discussions about an IPO or secondary sale'
+        PROMPT('The article mentions valuations, private funding rounds, investments, or discussions about an IPO or secondary sale: {0}', full_text)
     ) as ipo_flag
 from {{ ref('stg_news_headlines') }}
 where (

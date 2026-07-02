@@ -88,8 +88,11 @@ def articles_to_df(articles: list[dict]) -> pd.DataFrame:
             "full_text":    f"{title}. {desc}".strip(". "),
         })
     df = pd.DataFrame(rows).drop_duplicates("article_id")
-    df["published_at"] = pd.to_datetime(df["published_at"], utc=True, errors="coerce")
-    return df.dropna(subset=["published_at"])
+    df["published_at"] = pd.to_datetime(df["published_at"], utc=True, errors="coerce").dt.tz_localize(None)
+    df = df.dropna(subset=["published_at"])
+    # snowflake-connector's pyformat binding doesn't accept pandas Timestamp objects
+    df["published_at"] = df["published_at"].dt.to_pydatetime()
+    return df
 
 
 def load_to_snowflake(df: pd.DataFrame, conn) -> int:

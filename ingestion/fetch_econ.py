@@ -125,9 +125,9 @@ def main():
     n = load_to_snowflake(jolts, "RAW_BLS_JOLTS", conn)
     print(f"  Loaded {n} JOLTS rows")
 
-    # BLS CPS
+    # BLS CPS — RAW_BLS_CPS has no footnotes column (unlike RAW_BLS_JOLTS)
     print("Fetching BLS CPS...")
-    cps = fetch_bls(BLS_CPS_SERIES)
+    cps = fetch_bls(BLS_CPS_SERIES).drop(columns=["footnotes"])
     n = load_to_snowflake(cps, "RAW_BLS_CPS", conn)
     print(f"  Loaded {n} CPS rows")
 

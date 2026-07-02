@@ -21,6 +21,7 @@ Environment variables required:
 
 import os
 import json
+import time
 import requests
 import pandas as pd
 from datetime import datetime, timezone
@@ -76,17 +77,24 @@ def fetch_active_markets() -> list[dict]:
     markets = []
     offset = 0
     for _ in range(MAX_PAGES):
-        resp = requests.get(
-            GAMMA_API,
-            params={
-                "active": "true",
-                "closed": "false",
-                "limit": PAGE_LIMIT,
-                "offset": offset,
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
+        for attempt in range(3):
+            try:
+                resp = requests.get(
+                    GAMMA_API,
+                    params={
+                        "active": "true",
+                        "closed": "false",
+                        "limit": PAGE_LIMIT,
+                        "offset": offset,
+                    },
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                break
+            except requests.exceptions.ReadTimeout:
+                if attempt == 2:
+                    raise
+                time.sleep(2 * (attempt + 1))
         page = resp.json()
         if not page:
             break
