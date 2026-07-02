@@ -112,13 +112,13 @@ def load_to_snowflake(df: pd.DataFrame, conn) -> int:
     return inserted
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--from", dest="from_date",
                         default=(datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"))
     parser.add_argument("--to",   dest="to_date",
                         default=datetime.now().strftime("%Y-%m-%d"))
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     print(f"Fetching headlines {args.from_date} → {args.to_date}")
     conn = snowflake.connector.connect(**SF)

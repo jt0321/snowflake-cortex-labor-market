@@ -4,6 +4,7 @@
 -- 02_cortex_transforms.sql — Cortex AI transformation layer
 -- Run after raw tables are populated.
 -- ============================================================
+USE ROLE SYSADMIN;
 USE SCHEMA LABOR_MARKET.CORTEX;
 
 -- ----------------------------------------------------------

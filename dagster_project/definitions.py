@@ -7,7 +7,7 @@ from dagster_project.assets.ingestion import (
     raw_fred_icsa, raw_econ_monthly,
 )
 from dagster_project.assets.dbt_assets import (
-    daily_dbt_assets, monthly_dbt_assets, cortex_search_service,
+    dbt_transforms, cortex_search_service,
 )
 from dagster_project.schedules import (
     daily_schedule, weekly_schedule, monthly_schedule,
@@ -23,8 +23,7 @@ defs = Definitions(
         raw_fred_icsa,
         raw_econ_monthly,
         # dbt transforms
-        daily_dbt_assets,
-        monthly_dbt_assets,
+        dbt_transforms,
         # post-dbt DDL
         cortex_search_service,
     ],

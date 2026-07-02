@@ -1,6 +1,7 @@
 -- ============================================================
 -- 01_raw_tables.sql — Raw layer DDL
 -- ============================================================
+USE ROLE SYSADMIN;
 USE SCHEMA LABOR_MARKET.RAW;
 
 -- BLS JOLTS — monthly layoffs, openings, quits by industry

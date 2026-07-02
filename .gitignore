@@ -8,3 +8,7 @@ dbt/.user.yml
 .venv/
 .vscode/
 .env
+.envrc
+.direnv/
+.claude/
+.tmp_dagster_home_*/

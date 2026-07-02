@@ -13,10 +13,8 @@ models:
   labor_market:
     staging:
       +materialized: view
-      +schema: CORTEX
     marts:
       +materialized: table
-      +schema: CORTEX
       # Incremental Cortex AI models — only classify new rows
       news_classified:
         +materialized: incremental

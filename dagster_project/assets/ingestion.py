@@ -45,7 +45,7 @@ def raw_layoffs_fyi(context: AssetExecutionContext) -> None:
     tags={"schedule": "daily"},
 )
 def raw_news_headlines(context: AssetExecutionContext) -> None:
-    fetch_news.main()
+    fetch_news.main(argv=[])
     context.log.info("raw_news_headlines ingestion complete")
 
 

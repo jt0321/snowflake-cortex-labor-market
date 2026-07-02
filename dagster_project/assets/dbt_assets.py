@@ -1,51 +1,41 @@
 """
-dbt asset groups + Cortex Search DDL asset.
+dbt asset group + Cortex Search DDL asset.
 
-Three dbt asset groups mirror the schedule cadence:
-  daily_dbt_assets   — incremental Cortex classification + stock/layoff transforms
-  weekly_dbt_assets  — nothing today; hook point if weekly-tagged models are added
-  monthly_dbt_assets — AI_AGG theme rollups + AI_COMPLETE digest generation
+A single dbt_assets group covers the whole manifest — every dbt node maps to
+exactly one Dagster asset, so there's no risk of two asset groups both
+claiming the same node (e.g. monthly_integrated_digest depends on the
+daily-tagged stock_monthly_performance, so a model can be an "ancestor" of
+one cadence while being tagged for another). Cadence-specific runs
+(daily_ingest_and_transform, monthly_econ_and_digest in schedules.py) select
+a *subset* of this group via AssetSelection.tag(...).upstream(), rather than
+splitting the manifest into separate dbt_assets functions.
 """
 import snowflake.connector
 from dagster import asset, AssetExecutionContext, AssetKey
 from dagster_dbt import DbtCliResource, DagsterDbtTranslator, dbt_assets
 
 from dagster_project.resources import dbt_project, SNOWFLAKE_CONFIG
-from dagster_project.assets.ingestion import (
-    raw_stock_prices, raw_layoffs_fyi, raw_news_headlines,
-    raw_fred_icsa, raw_econ_monthly,
-)
 
 
-class _StaticGroupTranslator(DagsterDbtTranslator):
-    """Assigns every asset in a dbt_assets group to one fixed Dagster group name."""
-
-    def __init__(self, group_name: str):
-        self._group_name = group_name
-        super().__init__()
+class _CadenceGroupTranslator(DagsterDbtTranslator):
+    """Groups each dbt asset in the Dagster UI by its dbt cadence tag."""
 
     def get_group_name(self, dbt_resource_props):
-        return self._group_name
+        tags = dbt_resource_props.get("tags", [])
+        if "monthly" in tags:
+            return "transforms_monthly"
+        if "daily" in tags:
+            return "transforms_daily"
+        return "transforms_staging"
 
 
 @dbt_assets(
     manifest=dbt_project.manifest_path,
-    select="tag:daily",
-    name="daily_dbt_assets",
-    dagster_dbt_translator=_StaticGroupTranslator("transforms_daily"),
+    name="dbt_transforms",
+    dagster_dbt_translator=_CadenceGroupTranslator(),
 )
-def daily_dbt_assets(context: AssetExecutionContext, dbt: DbtCliResource):
-    yield from dbt.cli(["run", "--select", "tag:daily"], context=context).stream()
-
-
-@dbt_assets(
-    manifest=dbt_project.manifest_path,
-    select="tag:monthly",
-    name="monthly_dbt_assets",
-    dagster_dbt_translator=_StaticGroupTranslator("transforms_monthly"),
-)
-def monthly_dbt_assets(context: AssetExecutionContext, dbt: DbtCliResource):
-    yield from dbt.cli(["run", "--select", "tag:monthly"], context=context).stream()
+def dbt_transforms(context: AssetExecutionContext, dbt: DbtCliResource):
+    yield from dbt.cli(["run"], context=context).stream()
 
 
 @asset(

@@ -8,17 +8,17 @@ from dagster_project.assets.ingestion import (
     raw_fred_icsa, raw_econ_monthly,
 )
 from dagster_project.assets.dbt_assets import (
-    daily_dbt_assets, monthly_dbt_assets, cortex_search_service,
+    dbt_transforms, cortex_search_service,
 )
 
 # ── Daily (6 AM UTC) ──────────────────────────────────────────────────────
-# Ingest stocks, news, layoffs → run tag:daily dbt models → refresh Cortex Search
+# Ingest stocks, news, layoffs → run tag:daily dbt models (+ staging ancestors) → refresh Cortex Search
 
 daily_ingest_and_transform_job = define_asset_job(
     name="daily_ingest_and_transform",
     selection=AssetSelection.assets(
         raw_stock_prices, raw_layoffs_fyi, raw_news_headlines, raw_polymarket_markets,
-    ) | AssetSelection.assets(daily_dbt_assets) | AssetSelection.assets(cortex_search_service),
+    ) | AssetSelection.tag("daily", "").upstream() | AssetSelection.assets(cortex_search_service),
 )
 
 daily_schedule = ScheduleDefinition(
@@ -46,7 +46,7 @@ weekly_schedule = ScheduleDefinition(
 monthly_digest_job = define_asset_job(
     name="monthly_econ_and_digest",
     selection=AssetSelection.assets(raw_econ_monthly)
-              | AssetSelection.assets(monthly_dbt_assets),
+              | AssetSelection.tag("monthly", "").upstream(),
 )
 
 monthly_schedule = ScheduleDefinition(

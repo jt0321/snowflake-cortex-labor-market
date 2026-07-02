@@ -4,6 +4,7 @@
 -- 03_ipo_market_transforms.sql — Ingestion transform layer
 -- Run after RAW_LAYOFFS_FYI and RAW_STOCK_PRICES are loaded.
 -- ============================================================
+USE ROLE SYSADMIN;
 USE SCHEMA LABOR_MARKET.CORTEX;
 
 -- ----------------------------------------------------------
