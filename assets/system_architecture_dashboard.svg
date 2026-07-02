@@ -1,0 +1,211 @@
+<svg width="100%" viewBox="0 0 1440 650" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9AA5B1"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1440" height="650" fill="#FAFBFC"/>
+
+  <!-- Title -->
+  <text x="40" y="42" font-size="26" font-weight="700" fill="#1B2733">AI, IPOs &amp; the Labor Market</text>
+  <text x="40" y="63" font-size="13" fill="#6B7684">System architecture — data sources → ingestion → Snowflake Cortex AI → dashboard</text>
+
+  <!-- Dagster orchestration band -->
+  <rect x="318" y="68" width="804" height="32" rx="6" fill="none" stroke="#8A94A6" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <text x="720" y="89" font-size="12" font-weight="600" fill="#5B6B7A" text-anchor="middle" letter-spacing="0.5">DAGSTER · schedules &amp; asset orchestration (daily / weekly / monthly)</text>
+
+  <!-- connector ticks from Dagster band to cards -->
+  <line x1="442" y1="100" x2="442" y2="130" stroke="#9AA5B1" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <line x1="720" y1="100" x2="720" y2="150" stroke="#9AA5B1" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <line x1="998" y1="100" x2="998" y2="150" stroke="#9AA5B1" stroke-width="1.5" stroke-dasharray="3,3"/>
+
+  <!-- Snowflake account container (RAW + dbt/Cortex + Streamlit) -->
+  <rect x="566" y="105" width="620" height="475" rx="10" fill="#EEF4F9" stroke="#B9D3E3" stroke-width="1.5"/>
+  <g transform="translate(584,124)">
+    <path d="M8,0 L8,16 M0,4 L16,12 M16,4 L0,12 M4,-2 L4,3 M4,18 L4,13 M12,-2 L12,3 M12,18 L12,13" stroke="#2E6E9E" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  </g>
+  <text x="608" y="138" font-size="12" font-weight="700" fill="#2E6E9E" letter-spacing="0.5">SNOWFLAKE ACCOUNT</text>
+
+  <!-- ============ CARD 1: Data Sources ============ -->
+  <g>
+    <rect x="40" y="130" width="248" height="350" rx="8" fill="#FFFFFF" stroke="#D8DEE4" stroke-width="1.5"/>
+    <rect x="40" y="130" width="248" height="44" rx="8" fill="#5C7A94"/>
+    <rect x="40" y="160" width="248" height="14" fill="#5C7A94"/>
+    <text x="164" y="157" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">DATA SOURCES</text>
+
+    <!-- rows -->
+    <g font-size="12">
+      <!-- BLS -->
+      <rect x="60" y="200" width="10" height="10" rx="2" fill="#5C7A94"/>
+      <text x="80" y="209" font-weight="700" fill="#1F2933">BLS</text>
+      <text x="80" y="223" font-size="10" fill="#8A94A6">JOLTS, CPS · monthly API</text>
+
+      <!-- FRED -->
+      <rect x="60" y="246" width="10" height="10" rx="2" fill="#5C7A94"/>
+      <text x="80" y="255" font-weight="700" fill="#1F2933">FRED</text>
+      <text x="80" y="269" font-size="10" fill="#8A94A6">UNRATE, PAYEMS, ICSA</text>
+
+      <!-- NewsAPI -->
+      <rect x="60" y="292" width="10" height="10" rx="2" fill="#5C7A94"/>
+      <text x="80" y="301" font-weight="700" fill="#1F2933">NewsAPI</text>
+      <text x="80" y="315" font-size="10" fill="#8A94A6">AI / layoff headlines · daily</text>
+
+      <!-- Polymarket -->
+      <rect x="60" y="338" width="10" height="10" rx="2" fill="#5C7A94"/>
+      <text x="80" y="347" font-weight="700" fill="#1F2933">Polymarket</text>
+      <text x="80" y="361" font-size="10" fill="#8A94A6">Gamma API odds · daily</text>
+
+      <!-- Airtable -->
+      <rect x="60" y="384" width="10" height="10" rx="2" fill="#5C7A94"/>
+      <text x="80" y="393" font-weight="700" fill="#1F2933">Airtable</text>
+      <text x="80" y="407" font-size="10" fill="#8A94A6">layoffs.fyi export · daily</text>
+
+      <!-- Yahoo Finance -->
+      <rect x="60" y="430" width="10" height="10" rx="2" fill="#5C7A94"/>
+      <text x="80" y="439" font-weight="700" fill="#1F2933">Yahoo Finance</text>
+      <text x="80" y="453" font-size="10" fill="#8A94A6">MSFT, GOOGL, AMZN, TSLA, QQQ</text>
+    </g>
+  </g>
+
+  <!-- ============ CARD 2: Ingestion ============ -->
+  <g>
+    <rect x="318" y="130" width="248" height="350" rx="8" fill="#FFFFFF" stroke="#D8DEE4" stroke-width="1.5"/>
+    <rect x="318" y="130" width="248" height="44" rx="8" fill="#4F8A82"/>
+    <rect x="318" y="160" width="248" height="14" fill="#4F8A82"/>
+    <text x="442" y="157" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">INGESTION (PYTHON)</text>
+
+    <g font-size="12">
+      <rect x="338" y="200" width="10" height="10" rx="2" fill="#4F8A82"/>
+      <text x="358" y="209" font-weight="700" font-family="monospace" fill="#1F2933">fetch_econ.py</text>
+      <text x="358" y="223" font-size="10" fill="#8A94A6">→ RAW_BLS_*, RAW_FRED_SERIES</text>
+
+      <rect x="338" y="246" width="10" height="10" rx="2" fill="#4F8A82"/>
+      <text x="358" y="255" font-weight="700" font-family="monospace" fill="#1F2933">fetch_news.py</text>
+      <text x="358" y="269" font-size="10" fill="#8A94A6">→ RAW_NEWS_HEADLINES</text>
+
+      <rect x="338" y="292" width="10" height="10" rx="2" fill="#4F8A82"/>
+      <text x="358" y="301" font-weight="700" font-family="monospace" fill="#1F2933">fetch_polymarket.py</text>
+      <text x="358" y="315" font-size="10" fill="#8A94A6">→ RAW_POLYMARKET_MARKETS</text>
+
+      <rect x="338" y="338" width="10" height="10" rx="2" fill="#4F8A82"/>
+      <text x="358" y="347" font-weight="700" font-family="monospace" fill="#1F2933">fetch_layoffs.py</text>
+      <text x="358" y="361" font-size="10" fill="#8A94A6">→ RAW_LAYOFFS_FYI</text>
+
+      <rect x="338" y="384" width="10" height="10" rx="2" fill="#4F8A82"/>
+      <text x="358" y="393" font-weight="700" font-family="monospace" fill="#1F2933">fetch_stocks.py</text>
+      <text x="358" y="407" font-size="10" fill="#8A94A6">→ RAW_STOCK_PRICES</text>
+    </g>
+  </g>
+
+  <!-- ============ CARD 3: Snowflake RAW ============ -->
+  <g>
+    <rect x="596" y="150" width="248" height="410" rx="8" fill="#FFFFFF" stroke="#D8DEE4" stroke-width="1.5"/>
+    <rect x="596" y="150" width="248" height="44" rx="8" fill="#2E6E9E"/>
+    <rect x="596" y="180" width="248" height="14" fill="#2E6E9E"/>
+    <text x="720" y="177" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">RAW SCHEMA</text>
+
+    <g font-size="11">
+      <rect x="616" y="220" width="9" height="9" rx="2" fill="#2E6E9E"/>
+      <text x="634" y="228" font-weight="700" font-family="monospace" fill="#1F2933">RAW_BLS_JOLTS</text>
+
+      <rect x="616" y="260" width="9" height="9" rx="2" fill="#2E6E9E"/>
+      <text x="634" y="268" font-weight="700" font-family="monospace" fill="#1F2933">RAW_BLS_CPS</text>
+
+      <rect x="616" y="300" width="9" height="9" rx="2" fill="#2E6E9E"/>
+      <text x="634" y="308" font-weight="700" font-family="monospace" fill="#1F2933">RAW_FRED_SERIES</text>
+
+      <rect x="616" y="340" width="9" height="9" rx="2" fill="#2E6E9E"/>
+      <text x="634" y="348" font-weight="700" font-family="monospace" fill="#1F2933">RAW_NEWS_HEADLINES</text>
+
+      <rect x="616" y="380" width="9" height="9" rx="2" fill="#2E6E9E"/>
+      <text x="634" y="388" font-weight="700" font-family="monospace" fill="#1F2933">RAW_POLYMARKET_MARKETS</text>
+
+      <rect x="616" y="420" width="9" height="9" rx="2" fill="#2E6E9E"/>
+      <text x="634" y="428" font-weight="700" font-family="monospace" fill="#1F2933">RAW_LAYOFFS_FYI</text>
+
+      <rect x="616" y="460" width="9" height="9" rx="2" fill="#2E6E9E"/>
+      <text x="634" y="468" font-weight="700" font-family="monospace" fill="#1F2933">RAW_STOCK_PRICES</text>
+    </g>
+  </g>
+
+  <!-- ============ CARD 4: dbt + Cortex AI ============ -->
+  <g>
+    <rect x="874" y="150" width="248" height="410" rx="8" fill="#FFFFFF" stroke="#D8DEE4" stroke-width="1.5"/>
+    <rect x="874" y="150" width="248" height="44" rx="8" fill="#7A6A94"/>
+    <rect x="874" y="180" width="248" height="14" fill="#7A6A94"/>
+    <text x="998" y="177" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">DBT + CORTEX AI</text>
+
+    <text x="894" y="222" font-size="11" font-weight="700" fill="#6B7684" letter-spacing="0.5">STAGING · 6 MODELS</text>
+    <line x1="894" y1="232" x2="1102" y2="232" stroke="#E2E6EA" stroke-width="1"/>
+    <text x="894" y="252" font-size="11" font-weight="700" fill="#6B7684" letter-spacing="0.5">CORTEX AI FUNCTIONS</text>
+
+    <g font-size="11">
+      <rect x="894" y="268" width="9" height="9" rx="2" fill="#7A6A94"/>
+      <text x="912" y="276" font-weight="700" font-family="monospace" fill="#1F2933">AI_CLASSIFY</text>
+      <text x="912" y="289" font-size="9.5" fill="#8A94A6">news / IPO sentiment labels</text>
+
+      <rect x="894" y="308" width="9" height="9" rx="2" fill="#7A6A94"/>
+      <text x="912" y="316" font-weight="700" font-family="monospace" fill="#1F2933">AI_FILTER</text>
+      <text x="912" y="329" font-size="9.5" fill="#8A94A6">causal / IPO relevance flags</text>
+
+      <rect x="894" y="348" width="9" height="9" rx="2" fill="#7A6A94"/>
+      <text x="912" y="356" font-weight="700" font-family="monospace" fill="#1F2933">AI_COMPLETE</text>
+      <text x="912" y="369" font-size="9.5" fill="#8A94A6">narrative digest generation</text>
+
+      <rect x="894" y="388" width="9" height="9" rx="2" fill="#7A6A94"/>
+      <text x="912" y="396" font-weight="700" font-family="monospace" fill="#1F2933">AI_AGG</text>
+      <text x="912" y="409" font-size="9.5" fill="#8A94A6">monthly theme aggregation</text>
+
+      <rect x="894" y="428" width="9" height="9" rx="2" fill="#7A6A94"/>
+      <text x="912" y="436" font-weight="700" font-family="monospace" fill="#1F2933">EMBED_TEXT_768</text>
+      <text x="912" y="449" font-size="9.5" fill="#8A94A6">headline embeddings</text>
+
+      <rect x="894" y="468" width="9" height="9" rx="2" fill="#7A6A94"/>
+      <text x="912" y="476" font-weight="700" font-family="monospace" fill="#1F2933">CORTEX SEARCH</text>
+      <text x="912" y="489" font-size="9.5" fill="#8A94A6">semantic headline search</text>
+    </g>
+
+    <line x1="894" y1="516" x2="1102" y2="516" stroke="#E2E6EA" stroke-width="1"/>
+    <text x="894" y="534" font-size="10.5" font-style="italic" fill="#8A94A6">→ 9 mart models (dbt/models/marts)</text>
+  </g>
+
+  <!-- ============ CARD 5: Streamlit dashboard ============ -->
+  <g>
+    <rect x="1152" y="150" width="248" height="410" rx="8" fill="#FFFFFF" stroke="#D8DEE4" stroke-width="1.5"/>
+    <rect x="1152" y="150" width="248" height="44" rx="8" fill="#B5615C"/>
+    <rect x="1152" y="180" width="248" height="14" fill="#B5615C"/>
+    <text x="1276" y="177" font-size="12.5" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.3">STREAMLIT IN SNOWFLAKE</text>
+
+    <g font-size="12">
+      <rect x="1172" y="222" width="10" height="10" rx="2" fill="#B5615C"/>
+      <text x="1192" y="231" font-weight="700" fill="#1F2933">Overview KPIs</text>
+      <text x="1192" y="245" font-size="10" fill="#8A94A6">IPO count, AI adoption %, impact score</text>
+
+      <rect x="1172" y="268" width="10" height="10" rx="2" fill="#B5615C"/>
+      <text x="1192" y="277" font-weight="700" fill="#1F2933">IPO funding vs. AI jobs</text>
+      <text x="1192" y="291" font-size="10" fill="#8A94A6">trend comparison chart</text>
+
+      <rect x="1172" y="314" width="10" height="10" rx="2" fill="#B5615C"/>
+      <text x="1192" y="323" font-weight="700" fill="#1F2933">Labor market by sector</text>
+      <text x="1192" y="337" font-size="10" fill="#8A94A6">layoffs / hiring bar chart</text>
+
+      <rect x="1172" y="360" width="10" height="10" rx="2" fill="#B5615C"/>
+      <text x="1192" y="369" font-weight="700" fill="#1F2933">AI-generated digest</text>
+      <text x="1192" y="383" font-size="10" fill="#8A94A6">Cortex Search + AI_COMPLETE</text>
+
+      <rect x="1172" y="406" width="10" height="10" rx="2" fill="#B5615C"/>
+      <text x="1192" y="415" font-weight="700" fill="#1F2933">Prediction market sentiment</text>
+      <text x="1192" y="429" font-size="10" fill="#8A94A6">Polymarket implied odds</text>
+    </g>
+  </g>
+
+  <!-- ============ Flow arrows ============ -->
+  <line x1="288" y1="305" x2="315" y2="305" stroke="#9AA5B1" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="566" y1="305" x2="593" y2="355" stroke="#9AA5B1" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="844" y1="355" x2="871" y2="355" stroke="#9AA5B1" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="1122" y1="355" x2="1149" y2="355" stroke="#9AA5B1" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Footer -->
+  <text x="720" y="615" font-size="12" fill="#8A94A6" text-anchor="middle">Data flows left → right · orchestrated end-to-end by Dagster · transformed by dbt · scored with Snowflake Cortex AI</text>
+</svg>
