@@ -9,9 +9,16 @@ and OpenAI/Anthropic/SpaceX IPO sentiment news analyzed via Cortex AI.
 import streamlit as st
 import pandas as pd
 from snowflake.snowpark.context import get_active_session
+from snowflake.core import Root
 
 # Get active session
 session = get_active_session()
+root = Root(session)
+headline_search_service = (
+    root.databases["LABOR_MARKET"]
+    .schemas["CORTEX"]
+    .cortex_search_services["HEADLINE_SEARCH"]
+)
 
 # Page Setup
 st.set_page_config(
@@ -258,25 +265,26 @@ with tab3:
     )
     
     if search_q:
-        results = session.sql(f"""
-            SELECT *
-            FROM TABLE(
-              LABOR_MARKET.CORTEX.HEADLINE_SEARCH!SEARCH(
-                QUERY => '{search_q.replace("'", "''")}',
-                COLUMNS => ['full_text', 'category', 'published_at', 'source_name', 'ai_causal_flag'],
-                LIMIT => 20
-              )
-            )
-        """).to_pandas()
-        
+        search_filter = None
+        if cat_filter:
+            search_filter = {"@or": [{"@eq": {"category": c}} for c in cat_filter]}
+
+        response = headline_search_service.search(
+            query=search_q,
+            columns=["full_text", "category", "published_at", "source_name", "ai_causal_flag"],
+            filter=search_filter,
+            limit=20,
+        )
+        results = pd.DataFrame(response.results)
+
         if results.empty:
             st.warning("No articles found matching that semantic description.")
         else:
             for _, r in results.iterrows():
-                badge = "🔴 AI-causal" if r.get("AI_CAUSAL_FLAG") else ""
+                badge = "🔴 AI-causal" if r.get("ai_causal_flag") else ""
                 st.markdown(
-                    f"**{r['FULL_TEXT'][:140]}...** {badge}  \n"
-                    f"_{r['SOURCE_NAME']} · {str(r['PUBLISHED_AT'])[:10]} · `{r['CATEGORY']}`_"
+                    f"**{r['full_text'][:140]}...** {badge}  \n"
+                    f"_{r['source_name']} · {str(r['published_at'])[:10]} · `{r['category']}`_"
                 )
                 st.divider()
 

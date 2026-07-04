@@ -199,6 +199,7 @@ In Snowflake → **Streamlit** → **+ Streamlit App**:
 - Switch your active role to `SYSADMIN` *before* creating the app — a Streamlit-in-Snowflake app runs as whichever role owns it, and `ACCOUNTADMIN` doesn't automatically inherit `SYSADMIN`'s privileges on `LABOR_MARKET.CORTEX` objects (they're peers, not parent/child). Creating it under the wrong role hits the same "no privileges on it" error as the `HEADLINE_SEARCH` issue above.
 - Paste contents of `streamlit/app.py`
 - Set database: `LABOR_MARKET`, warehouse: `LABOR_WH`
+- In the app's **Packages** dropdown, add `snowflake.core` — the Semantic Search tab queries `HEADLINE_SEARCH` via the Cortex Search Python API (`snowflake.core.Root`), since Cortex Search services aren't queryable from plain SQL outside of `SEARCH_PREVIEW` (testing-only, not for app use)
 
 ---
 
