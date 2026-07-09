@@ -24,10 +24,29 @@ sources:
             tests: [not_null, unique]
       - name: RAW_BLS_JOLTS
         description: BLS JOLTS monthly layoffs by industry
+        columns:
+          - name: series_id
+            tests: [not_null]
+          - name: year
+            tests: [not_null]
+          - name: period
+            tests: [not_null]
       - name: RAW_BLS_CPS
         description: BLS CPS unemployment + labor force participation
+        columns:
+          - name: series_id
+            tests: [not_null]
+          - name: year
+            tests: [not_null]
+          - name: period
+            tests: [not_null]
       - name: RAW_FRED_SERIES
         description: FRED series — UNRATE, PAYEMS, ICSA
+        columns:
+          - name: series_id
+            tests: [not_null]
+          - name: observation_date
+            tests: [not_null]
       - name: RAW_POLYMARKET_MARKETS
         description: Daily snapshots of Polymarket implied probabilities for recession/unemployment/AI-jobs/IPO markets
         columns:

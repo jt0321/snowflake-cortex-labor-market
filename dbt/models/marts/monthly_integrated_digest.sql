@@ -9,10 +9,12 @@ with econ as (
 bls_layoffs as (
     select
         month_date as month,
-        sum(value) as bls_total_layoffs_k
+        value      as bls_total_layoffs_k
     from {{ ref('stg_bls_jolts') }}
-    where series_id like '%LAY%'
-    group by 1
+    -- total nonfarm layoffs & discharges only — the other JOLTS series in
+    -- this table are industry subsets of this total, so summing across all
+    -- of them would double-count
+    where series_id = 'JTS000000000000000LDL'
 ),
 fyi_layoffs as (
     select

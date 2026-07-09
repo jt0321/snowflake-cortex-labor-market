@@ -35,7 +35,10 @@ class _CadenceGroupTranslator(DagsterDbtTranslator):
     dagster_dbt_translator=_CadenceGroupTranslator(),
 )
 def dbt_transforms(context: AssetExecutionContext, dbt: DbtCliResource):
-    yield from dbt.cli(["run"], context=context).stream()
+    # "build" (not "run") so schema/singular tests execute as part of the
+    # pipeline and fail the run when raw data quality regresses, instead of
+    # sitting in dbt/tests/ unexercised.
+    yield from dbt.cli(["build"], context=context).stream()
 
 
 @asset(

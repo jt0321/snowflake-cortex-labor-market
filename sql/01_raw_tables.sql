@@ -6,7 +6,7 @@ USE SCHEMA LABOR_MARKET.RAW;
 
 -- BLS JOLTS — monthly layoffs, openings, quits by industry
 CREATE TABLE IF NOT EXISTS RAW_BLS_JOLTS (
-  series_id       VARCHAR,    -- e.g. JTS000000000000000LAY (total layoffs)
+  series_id       VARCHAR,    -- e.g. JTS000000000000000LDL (total layoffs)
   year            NUMBER,
   period          VARCHAR,    -- M01-M12
   period_name     VARCHAR,

@@ -34,12 +34,14 @@ SF = dict(
 )
 
 # BLS series IDs
-# JOLTS: total layoffs/discharges not seasonally adjusted
+# JOLTS: layoffs & discharges level, not seasonally adjusted.
+# Data element code is LDL (not LAY, which doesn't exist), and professional
+# & business services uses industry code 540099 (not 540000).
 BLS_JOLTS_SERIES = [
-    "JTS000000000000000LAY",   # total layoffs, all industries
-    "JTS510000000000000LAY",   # information sector
-    "JTS540000000000000LAY",   # professional & business services
-    "JTS600000000000000LAY",   # education & health services
+    "JTS000000000000000LDL",   # total layoffs, all industries
+    "JTS510000000000000LDL",   # information sector
+    "JTS540099000000000LDL",   # professional & business services
+    "JTS600000000000000LDL",   # education & health services
 ]
 # CPS: unemployment rate + labor force participation
 BLS_CPS_SERIES = ["LNS14000000", "LNS11300000"]
@@ -105,19 +107,38 @@ def fetch_fred(series_id: str, start: str = "2019-01-01") -> pd.DataFrame:
 
 
 # ── Snowflake load ──────────────────────────────────────────────────────────
-def load_to_snowflake(df: pd.DataFrame, table: str, conn) -> int:
+def load_to_snowflake(df: pd.DataFrame, table: str, key_cols: list[str], conn) -> int:
+    """Insert rows only if they don't already exist (matched on key_cols).
+
+    Runs repeat on daily/weekly/monthly schedules over overlapping date
+    ranges, so a plain INSERT would re-duplicate rows on every run.
+    """
     cursor = conn.cursor()
     # NaN floats bind as an unquoted NAN literal, which Snowflake parses as an
     # invalid identifier — convert to None so it binds as NULL instead.
     # astype(object) first: .where() on a float64 column re-coerces None back
     # to NaN, since a numpy float array has nowhere to put a Python None.
     df = df.astype(object).where(pd.notnull(df), None)
-    rows = [tuple(r) for r in df.itertuples(index=False)]
-    placeholders = ", ".join(["%s"] * len(df.columns))
-    sql = f"INSERT INTO {table} ({', '.join(df.columns)}) VALUES ({placeholders})"
-    cursor.executemany(sql, rows)
+    cols = list(df.columns)
+    placeholders = ", ".join(["%s"] * len(cols))
+    key_match = " AND ".join(f"{k} = %s" for k in key_cols)
+
+    sql = f"""
+        INSERT INTO {table} ({', '.join(cols)})
+        SELECT {placeholders}
+        WHERE NOT EXISTS (
+          SELECT 1 FROM {table} WHERE {key_match}
+        )
+    """
+
+    inserted = 0
+    for row in df.itertuples(index=False, name=None):
+        vals = dict(zip(cols, row))
+        cursor.execute(sql, tuple(vals[c] for c in cols) + tuple(vals[k] for k in key_cols))
+        inserted += cursor.rowcount
+
     cursor.close()
-    return len(rows)
+    return inserted
 
 
 # ── Main ───────────────────────────────────────────────────────────────────
@@ -127,20 +148,20 @@ def main():
     # BLS JOLTS
     print("Fetching BLS JOLTS...")
     jolts = fetch_bls(BLS_JOLTS_SERIES)
-    n = load_to_snowflake(jolts, "RAW_BLS_JOLTS", conn)
+    n = load_to_snowflake(jolts, "RAW_BLS_JOLTS", ["series_id", "year", "period"], conn)
     print(f"  Loaded {n} JOLTS rows")
 
     # BLS CPS — RAW_BLS_CPS has no footnotes column (unlike RAW_BLS_JOLTS)
     print("Fetching BLS CPS...")
     cps = fetch_bls(BLS_CPS_SERIES).drop(columns=["footnotes"])
-    n = load_to_snowflake(cps, "RAW_BLS_CPS", conn)
+    n = load_to_snowflake(cps, "RAW_BLS_CPS", ["series_id", "year", "period"], conn)
     print(f"  Loaded {n} CPS rows")
 
     # FRED
     print("Fetching FRED series...")
     fred_dfs = [fetch_fred(s) for s in FRED_SERIES]
     fred_df  = pd.concat(fred_dfs, ignore_index=True)
-    n = load_to_snowflake(fred_df, "RAW_FRED_SERIES", conn)
+    n = load_to_snowflake(fred_df, "RAW_FRED_SERIES", ["series_id", "observation_date"], conn)
     print(f"  Loaded {n} FRED rows")
 
     conn.close()

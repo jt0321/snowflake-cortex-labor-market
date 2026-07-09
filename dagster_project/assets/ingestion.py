@@ -71,7 +71,7 @@ def raw_fred_icsa(context: AssetExecutionContext) -> None:
     from dagster_project.resources import SNOWFLAKE_CONFIG
     conn = snowflake.connector.connect(**SNOWFLAKE_CONFIG)
     df = fetch_econ.fetch_fred("ICSA")
-    n = fetch_econ.load_to_snowflake(df, "RAW_FRED_SERIES", conn)
+    n = fetch_econ.load_to_snowflake(df, "RAW_FRED_SERIES", ["series_id", "observation_date"], conn)
     conn.close()
     context.log.info(f"ICSA: loaded {n} rows")
 

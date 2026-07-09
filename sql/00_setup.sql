@@ -7,6 +7,8 @@ USE ROLE SYSADMIN;
 
 CREATE DATABASE IF NOT EXISTS LABOR_MARKET;
 CREATE SCHEMA  IF NOT EXISTS LABOR_MARKET.RAW;
+-- ANALYTICS is unused — dbt (see dbt/profiles.yml) targets CORTEX for both
+-- the staging views and mart tables, so all transformed data lives there.
 CREATE SCHEMA  IF NOT EXISTS LABOR_MARKET.ANALYTICS;
 CREATE SCHEMA  IF NOT EXISTS LABOR_MARKET.CORTEX;
 
