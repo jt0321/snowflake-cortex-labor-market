@@ -8,8 +8,13 @@ with econ as (
 ),
 bls_layoffs as (
     select
-        month_date as month,
-        value      as bls_total_layoffs_k
+        month_date  as month,
+        value       as bls_total_layoffs_k,
+        -- BLS JOLTS values are natively in thousands of persons; Layoffs.fyi
+        -- is a raw headcount. Converting here (not in the app) so every
+        -- consumer gets a column already comparable to fyi_tech_layoffs,
+        -- instead of re-deriving the *1000 themselves.
+        value * 1000 as bls_total_layoffs
     from {{ ref('stg_bls_jolts') }}
     -- total nonfarm layoffs & discharges only — the other JOLTS series in
     -- this table are industry subsets of this total, so summing across all
@@ -55,6 +60,7 @@ select
     e.unemployment_rate,
     e.nonfarm_payroll_k,
     coalesce(l.bls_total_layoffs_k, 0)  as bls_total_layoffs_k,
+    coalesce(l.bls_total_layoffs, 0)     as bls_total_layoffs,
     coalesce(f.fyi_tech_layoffs, 0)      as fyi_tech_layoffs,
     s.qqq_close,
     s.qqq_return,

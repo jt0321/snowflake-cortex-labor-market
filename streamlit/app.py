@@ -136,7 +136,7 @@ with tab1:
     df_combined = session.sql("""
         SELECT
           d.month,
-          d.bls_total_layoffs_k,
+          d.bls_total_layoffs,
           d.fyi_tech_layoffs,
           d.unemployment_rate
         FROM LABOR_MARKET.CORTEX.MONTHLY_INTEGRATED_DIGEST d
@@ -148,13 +148,19 @@ with tab1:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### Broad Economy vs. Tech Layoffs")
-        chart_data = df_combined.set_index("month")[["BLS_TOTAL_LAYOFFS_K", "FYI_TECH_LAYOFFS"]].copy()
+        # Both columns are already raw persons (the mart does the conversion
+        # — see bls_total_layoffs in monthly_integrated_digest.sql) so this
+        # comparison is apples-to-apples.
+        chart_data = df_combined.set_index("month")[["BLS_TOTAL_LAYOFFS", "FYI_TECH_LAYOFFS"]].copy()
         chart_data = chart_data.rename(columns={
-            "BLS_TOTAL_LAYOFFS_K": "BLS Total Layoffs (K)",
-            "FYI_TECH_LAYOFFS": "Tech Layoffs (Actual Count)"
+            "BLS_TOTAL_LAYOFFS": "BLS Total Layoffs (all industries)",
+            "FYI_TECH_LAYOFFS": "Tech Layoffs (Layoffs.fyi)"
         })
         st.line_chart(chart_data, use_container_width=True)
-        st.caption("Comparison of macro economy layoffs (BLS, thousands) and specific tech layoffs (Layoffs.fyi, raw count).")
+        st.caption(
+            "Both series in raw persons. BLS covers the entire US economy; Layoffs.fyi covers tech only — "
+            "expect BLS to run well above tech layoffs, since tech is a subset of the total."
+        )
 
     with col2:
         st.markdown("### Layoffs by Industry (BLS JOLTS)")
@@ -162,9 +168,9 @@ with tab1:
             SELECT
               month_date AS month,
               CASE series_id
-                WHEN 'JTS510000000000000LDL' THEN 'Information'
-                WHEN 'JTS540099000000000LDL' THEN 'Professional & Business Services'
-                WHEN 'JTS600000000000000LDL' THEN 'Education & Health Services'
+                WHEN 'JTS510000000000000LDL' THEN 'Information (K)'
+                WHEN 'JTS540099000000000LDL' THEN 'Professional & Business Services (K)'
+                WHEN 'JTS600000000000000LDL' THEN 'Education & Health Services (K)'
               END AS industry,
               value AS layoffs_k
             FROM LABOR_MARKET.CORTEX.STG_BLS_JOLTS
@@ -174,7 +180,7 @@ with tab1:
         jolts_industry["MONTH"] = pd.to_datetime(jolts_industry["MONTH"])
         jolts_pivot = jolts_industry.pivot_table(index="MONTH", columns="INDUSTRY", values="LAYOFFS_K")
         st.line_chart(jolts_pivot, use_container_width=True)
-        st.caption("Monthly layoffs & discharges (thousands) by industry, not seasonally adjusted — BLS JOLTS.")
+        st.caption("Monthly layoffs & discharges, thousands of persons, by industry, not seasonally adjusted — BLS JOLTS.")
 
     st.markdown("### Weekly Initial Jobless Claims (FRED ICSA)")
     icsa_df = session.sql("""
@@ -192,7 +198,7 @@ with tab1:
     # Metrics row
     m1, m2, m3, m4 = st.columns(4)
 
-    corr_bls_vs_fyi = df_combined["BLS_TOTAL_LAYOFFS_K"].corr(df_combined["FYI_TECH_LAYOFFS"])
+    corr_bls_vs_fyi = df_combined["BLS_TOTAL_LAYOFFS"].corr(df_combined["FYI_TECH_LAYOFFS"])
     m1.metric(
         "BLS vs. Tech Layoffs Correlation",
         f"{corr_bls_vs_fyi:.2f}",
