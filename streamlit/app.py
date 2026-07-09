@@ -10,6 +10,7 @@ and OpenAI/Anthropic/SpaceX IPO sentiment news analyzed via Cortex AI.
 
 import os
 import json
+import datetime
 import streamlit as st
 import pandas as pd
 
@@ -145,13 +146,35 @@ with tab1:
 
     df_combined["month"] = pd.to_datetime(df_combined["MONTH"])
 
+    # st.line_chart has no built-in zoom/pan — the standard Streamlit pattern
+    # for narrowing a time series is to filter the dataframe with a range
+    # control before charting. COVID (Mar–Apr 2020) is a huge outlier that
+    # otherwise dominates the y-axis on every chart below; default the window
+    # to the ChatGPT era (Nov 2022 on) since that's what's actually relevant
+    # to an "AI and the labor market" question, while leaving full history
+    # selectable.
+    min_month = df_combined["month"].min().date()
+    max_month = df_combined["month"].max().date()
+    default_start = max(min_month, datetime.date(2022, 11, 1))
+    range_start, range_end = st.slider(
+        "Date range",
+        min_value=min_month,
+        max_value=max_month,
+        value=(default_start, max_month),
+        format="MMM YYYY",
+        key="tab1_date_range",
+    )
+    df_windowed = df_combined[
+        (df_combined["month"].dt.date >= range_start) & (df_combined["month"].dt.date <= range_end)
+    ]
+
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### Broad Economy vs. Tech Layoffs")
         # Both columns are already raw persons (the mart does the conversion
         # — see bls_total_layoffs in monthly_integrated_digest.sql) so this
         # comparison is apples-to-apples.
-        chart_data = df_combined.set_index("month")[["BLS_TOTAL_LAYOFFS", "FYI_TECH_LAYOFFS"]].copy()
+        chart_data = df_windowed.set_index("month")[["BLS_TOTAL_LAYOFFS", "FYI_TECH_LAYOFFS"]].copy()
         chart_data = chart_data.rename(columns={
             "BLS_TOTAL_LAYOFFS": "BLS Total Layoffs (all industries)",
             "FYI_TECH_LAYOFFS": "Tech Layoffs (Layoffs.fyi)"
@@ -178,7 +201,10 @@ with tab1:
             ORDER BY month
         """).to_pandas()
         jolts_industry["MONTH"] = pd.to_datetime(jolts_industry["MONTH"])
-        jolts_pivot = jolts_industry.pivot_table(index="MONTH", columns="INDUSTRY", values="LAYOFFS_K")
+        jolts_windowed = jolts_industry[
+            (jolts_industry["MONTH"].dt.date >= range_start) & (jolts_industry["MONTH"].dt.date <= range_end)
+        ]
+        jolts_pivot = jolts_windowed.pivot_table(index="MONTH", columns="INDUSTRY", values="LAYOFFS_K")
         st.line_chart(jolts_pivot, use_container_width=True)
         st.caption("Monthly layoffs & discharges, thousands of persons, by industry, not seasonally adjusted — BLS JOLTS.")
 
@@ -190,7 +216,10 @@ with tab1:
         ORDER BY observation_date
     """).to_pandas()
     icsa_df["OBSERVATION_DATE"] = pd.to_datetime(icsa_df["OBSERVATION_DATE"])
-    st.line_chart(icsa_df.set_index("OBSERVATION_DATE")[["VALUE"]].rename(columns={"VALUE": "Initial Claims"}), use_container_width=True)
+    icsa_windowed = icsa_df[
+        (icsa_df["OBSERVATION_DATE"].dt.date >= range_start) & (icsa_df["OBSERVATION_DATE"].dt.date <= range_end)
+    ]
+    st.line_chart(icsa_windowed.set_index("OBSERVATION_DATE")[["VALUE"]].rename(columns={"VALUE": "Initial Claims"}), use_container_width=True)
     st.caption("Weekly initial unemployment claims, not seasonally adjusted — the highest-frequency leading indicator available here.")
 
     st.divider()
@@ -198,11 +227,11 @@ with tab1:
     # Metrics row
     m1, m2, m3, m4 = st.columns(4)
 
-    corr_bls_vs_fyi = df_combined["BLS_TOTAL_LAYOFFS"].corr(df_combined["FYI_TECH_LAYOFFS"])
+    corr_bls_vs_fyi = df_windowed["BLS_TOTAL_LAYOFFS"].corr(df_windowed["FYI_TECH_LAYOFFS"])
     m1.metric(
         "BLS vs. Tech Layoffs Correlation",
         f"{corr_bls_vs_fyi:.2f}",
-        help="Correlation between general U.S. layoffs (BLS JOLTS) and tech layoffs (Layoffs.fyi). A high value indicates tech moves in lockstep with the broader market."
+        help="Correlation between general U.S. layoffs (BLS JOLTS) and tech layoffs (Layoffs.fyi), over the selected date range. A high value indicates tech moves in lockstep with the broader market."
     )
 
     icsa_latest = icsa_df["VALUE"].iloc[-1] if not icsa_df.empty else None
