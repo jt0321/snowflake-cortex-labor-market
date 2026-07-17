@@ -14,6 +14,7 @@ import datetime
 import streamlit as st
 import pandas as pd
 
+
 # Get Snowflake connection (Container Runtime pattern)
 conn = st.connection("snowflake", ttl=os.getenv("SNOWFLAKE_CONNECTION_TTL"))
 session = conn.session()
@@ -155,7 +156,7 @@ with tab1:
     # selectable.
     min_month = df_combined["month"].min().date()
     max_month = df_combined["month"].max().date()
-    default_start = max(min_month, datetime.date(2022, 11, 1))
+    default_start = max(min_month, datetime.date(2020, 1, 1))
     range_start, range_end = st.slider(
         "Date range",
         min_value=min_month,
@@ -171,18 +172,27 @@ with tab1:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### Broad Economy vs. Tech Layoffs")
-        # Both columns are already raw persons (the mart does the conversion
-        # — see bls_total_layoffs in monthly_integrated_digest.sql) so this
-        # comparison is apples-to-apples.
-        chart_data = df_windowed.set_index("month")[["BLS_TOTAL_LAYOFFS", "FYI_TECH_LAYOFFS"]].copy()
-        chart_data = chart_data.rename(columns={
-            "BLS_TOTAL_LAYOFFS": "BLS Total Layoffs (all industries)",
-            "FYI_TECH_LAYOFFS": "Tech Layoffs (Layoffs.fyi)"
-        })
-        st.line_chart(chart_data, use_container_width=True)
+        # BLS (whole economy) runs roughly 10x above tech-only layoffs.
+        # We scale BLS down by 1/10 so both lines use comparable vertical space.
+        toggle_col1, toggle_col2 = st.columns(2)
+        show_bls = toggle_col1.checkbox("Show BLS Total Layoffs", value=True, key="tab1_show_bls")
+        show_tech = toggle_col2.checkbox("Show Tech Layoffs", value=True, key="tab1_show_tech")
+
+        # Scale BLS down by 1/10 so both series are comparable on one axis
+        df_chart = df_windowed[["month"]].copy()
+        plot_cols = []
+        if show_tech:
+            df_chart["Tech Layoffs (Layoffs.fyi)"] = df_windowed["FYI_TECH_LAYOFFS"]
+            plot_cols.append("Tech Layoffs (Layoffs.fyi)")
+        if show_bls:
+            df_chart["BLS Total Layoffs (÷10)"] = df_windowed["BLS_TOTAL_LAYOFFS"] / 10
+            plot_cols.append("BLS Total Layoffs (÷10)")
+
+        if plot_cols:
+            st.line_chart(df_chart.set_index("month")[plot_cols], height=350)
         st.caption(
-            "Both series in raw persons. BLS covers the entire US economy; Layoffs.fyi covers tech only — "
-            "expect BLS to run well above tech layoffs, since tech is a subset of the total."
+            "Both series in persons. BLS (entire US economy) is scaled to 1/10 actual value "
+            "so both lines are visually comparable — tech layoffs are roughly 1/10 of the national total."
         )
 
     with col2:
