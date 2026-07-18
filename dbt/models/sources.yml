@@ -6,12 +6,12 @@ sources:
     schema: RAW
     tables:
       - name: RAW_NEWS_HEADLINES
-        description: NewsAPI headlines — AI, labor market, IPO topics
+        description: News headlines — AI, labor market, IPO topics. NewsAPI (fresh, ~1 month depth) plus GDELT and Hacker News (keyless, backfilled to 2020)
         columns:
           - name: article_id
             tests: [not_null, unique]
       - name: RAW_STOCK_PRICES
-        description: Daily closing prices for MSFT, GOOGL, AMZN, TSLA, QQQ
+        description: Daily closing prices for MSFT, GOOGL, AMZN, TSLA, QQQ, and ^GSPC (S&P 500)
         columns:
           - name: ticker
             tests: [not_null]
@@ -41,7 +41,7 @@ sources:
           - name: period
             tests: [not_null]
       - name: RAW_FRED_SERIES
-        description: FRED series — UNRATE, PAYEMS, ICSA
+        description: FRED series — UNRATE, PAYEMS, ICSA, CPIAUCSL, CPILFESL, FEDFUNDS
         columns:
           - name: series_id
             tests: [not_null]

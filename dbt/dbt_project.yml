@@ -33,6 +33,10 @@ models:
         +tags: ["daily"]
       stock_monthly_performance:
         +tags: ["daily"]
+      macro_monthly:
+        +tags: ["daily"]
+      monthly_news_fear_index:
+        +tags: ["daily"]
       # Monthly — regenerate digests when new econ data arrives
       monthly_sentiment_themes:
         +tags: ["monthly"]

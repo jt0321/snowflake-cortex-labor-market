@@ -275,6 +275,160 @@ with tab1:
         help="Latest monthly average implied probability of a recession, from Polymarket prediction markets — a market-priced fear signal distinct from news sentiment."
     )
 
+    # ── The main question: does headline fear track actual layoffs? ──────
+    st.divider()
+    st.subheader("Does the data back up the fear?")
+    st.markdown(
+        "The share of headlines each month that Cortex classifies as fear (`layoff` / `ai_fear`), "
+        "plotted against what actually happened to jobs. The news corpus reaches back to 2020 via "
+        "GDELT and Hacker News, so both sides of the ChatGPT moment (Nov 2022) are covered."
+    )
+
+    fear_df = session.sql("""
+        SELECT month, headline_count, fear_share_pct, ai_causal_share_pct
+        FROM LABOR_MARKET.CORTEX.MONTHLY_NEWS_FEAR_INDEX
+        ORDER BY month
+    """).to_pandas()
+
+    if fear_df.empty:
+        st.caption(
+            "No classified headlines yet. Run `fetch_news_history.py --backfill` for 2020+ "
+            "history, then a dbt run to classify it."
+        )
+    else:
+        fear_df["MONTH"] = pd.to_datetime(fear_df["MONTH"])
+        fear_windowed = fear_df[
+            (fear_df["MONTH"].dt.date >= range_start) & (fear_df["MONTH"].dt.date <= range_end)
+        ]
+
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            st.markdown("### News Fear Share (% of headlines)")
+            st.line_chart(
+                fear_windowed.set_index("MONTH")[["FEAR_SHARE_PCT", "AI_CAUSAL_SHARE_PCT"]].rename(
+                    columns={
+                        "FEAR_SHARE_PCT": "Fear headlines (%)",
+                        "AI_CAUSAL_SHARE_PCT": "Cites AI as job-loss cause (%)",
+                    }
+                ),
+                height=320,
+            )
+            st.caption(
+                "Shares, not raw counts — corpus size varies by month and source mix, "
+                "so shares measure tone rather than ingestion volume."
+            )
+
+        with col_f2:
+            st.markdown("### Fear vs. Reality Correlation")
+            # Months with a thin corpus produce unstable shares — keep them on
+            # the chart but out of the correlation.
+            merged = fear_windowed[fear_windowed["HEADLINE_COUNT"] >= 20].merge(
+                df_windowed, left_on="MONTH", right_on="month", how="inner"
+            )
+            corr_fear_bls = merged["FEAR_SHARE_PCT"].corr(merged["BLS_TOTAL_LAYOFFS"])
+            corr_fear_fyi = merged["FEAR_SHARE_PCT"].corr(merged["FYI_TECH_LAYOFFS"])
+
+            v1, v2 = st.columns(2)
+            v1.metric(
+                "Fear vs. BLS Layoffs",
+                f"{corr_fear_bls:.2f}" if pd.notna(corr_fear_bls) else "N/A",
+                help="Correlation between monthly fear-headline share and economy-wide BLS layoffs, over the selected range (months with ≥20 classified headlines).",
+            )
+            v2.metric(
+                "Fear vs. Tech Layoffs",
+                f"{corr_fear_fyi:.2f}" if pd.notna(corr_fear_fyi) else "N/A",
+                help="Correlation between monthly fear-headline share and Layoffs.fyi tech layoffs, over the selected range (months with ≥20 classified headlines).",
+            )
+
+            best_corr = max(
+                (c for c in (corr_fear_bls, corr_fear_fyi) if pd.notna(c)), default=None
+            )
+            if best_corr is None:
+                st.caption("Not enough overlapping months to compute a verdict for this range.")
+            elif best_corr >= 0.5:
+                st.markdown(
+                    "**Verdict for this window: the fear tracks reality.** Months with more "
+                    "fearful headlines are also months with more actual layoffs."
+                )
+            elif best_corr >= 0.2:
+                st.markdown(
+                    "**Verdict for this window: loosely connected.** Headline fear moves with "
+                    "layoffs only weakly — much of the tone is independent of the numbers."
+                )
+            else:
+                st.markdown(
+                    "**Verdict for this window: fear runs ahead of the data.** Headline fear "
+                    "and actual layoffs are largely decoupled in this period."
+                )
+
+    # ── Broader macro context: inflation, rates, overall market ──────────
+    st.divider()
+    st.subheader("Inflation, Rates & the Overall Market")
+    st.markdown(
+        "Control variables for the AI story: if layoffs move with **inflation and the Fed funds "
+        "rate** (the 2022–23 tightening cycle), that's a business-cycle explanation. And if tech "
+        "(**QQQ**) simply moves with the whole market (**S&P 500**), weakness isn't tech-specific."
+    )
+
+    macro_df = session.sql("""
+        SELECT month, cpi_yoy_pct, core_cpi_yoy_pct, fed_funds_rate,
+               sp500_close, qqq_close, sp500_return_pct
+        FROM LABOR_MARKET.CORTEX.MACRO_MONTHLY
+        ORDER BY month
+    """).to_pandas()
+
+    if macro_df.empty:
+        st.caption("No macro data yet — run fetch_econ.py and fetch_stocks.py, then a dbt run.")
+    else:
+        macro_df["MONTH"] = pd.to_datetime(macro_df["MONTH"])
+        macro_windowed = macro_df[
+            (macro_df["MONTH"].dt.date >= range_start) & (macro_df["MONTH"].dt.date <= range_end)
+        ]
+
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.markdown("### Inflation & the Policy Rate (%)")
+            st.line_chart(
+                macro_windowed.set_index("MONTH")[
+                    ["CPI_YOY_PCT", "CORE_CPI_YOY_PCT", "FED_FUNDS_RATE"]
+                ].rename(columns={
+                    "CPI_YOY_PCT": "CPI YoY",
+                    "CORE_CPI_YOY_PCT": "Core CPI YoY",
+                    "FED_FUNDS_RATE": "Fed Funds Rate",
+                }),
+                height=320,
+            )
+            st.caption("Headline and core CPI year-over-year, with the effective Fed funds rate — FRED.")
+
+        with col_m2:
+            st.markdown("### Overall Market vs. Tech (indexed)")
+            idx = macro_windowed.set_index("MONTH")[["SP500_CLOSE", "QQQ_CLOSE"]].dropna()
+            if idx.empty:
+                st.caption("No index prices in this range yet.")
+            else:
+                normalized = (idx / idx.iloc[0] - 1) * 100
+                st.line_chart(
+                    normalized.rename(columns={
+                        "SP500_CLOSE": "S&P 500 (%)",
+                        "QQQ_CLOSE": "QQQ (%)",
+                    }),
+                    height=320,
+                )
+                st.caption("Cumulative return since the start of the selected range — Yahoo Finance month-end closes.")
+
+        latest_macro = macro_windowed.dropna(subset=["CPI_YOY_PCT"]).tail(1)
+        mm1, mm2, mm3, mm4 = st.columns(4)
+        if not latest_macro.empty:
+            lm = latest_macro.iloc[0]
+            mm1.metric("CPI YoY", f"{lm['CPI_YOY_PCT']:.1f}%")
+            mm2.metric("Core CPI YoY", f"{lm['CORE_CPI_YOY_PCT']:.1f}%" if pd.notna(lm["CORE_CPI_YOY_PCT"]) else "N/A")
+            mm3.metric("Fed Funds Rate", f"{lm['FED_FUNDS_RATE']:.2f}%" if pd.notna(lm["FED_FUNDS_RATE"]) else "N/A")
+        sp_latest = macro_windowed.dropna(subset=["SP500_RETURN_PCT"]).tail(1)
+        mm4.metric(
+            "S&P 500 Monthly Return",
+            f"{sp_latest['SP500_RETURN_PCT'].iloc[0]:+.2f}%" if not sp_latest.empty else "N/A",
+        )
+
 
 # ── Tab 2: Monthly Digests ──────────────────────────────────────────────────
 with tab2:
@@ -459,7 +613,11 @@ with tab5:
         normalized_stocks = (stock_pivot / stock_pivot.iloc[0] - 1) * 100
 
         st.line_chart(normalized_stocks, use_container_width=True)
-        st.caption("Normalized price performance (%) of tech proxies over the entire period, relative to the starting date.")
+        st.caption(
+            "Normalized price performance (%) relative to the starting date. "
+            "^GSPC (S&P 500) is the overall-market baseline — divergence between it and the "
+            "tech proxies is what makes a move tech-specific."
+        )
 
     st.divider()
 

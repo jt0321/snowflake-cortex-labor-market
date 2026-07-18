@@ -1,7 +1,8 @@
 """
 ingestion/fetch_stocks.py
 Fetches daily closing prices for tech stocks (MSFT, GOOGL, AMZN, TSLA, QQQ)
-via the public Yahoo Finance chart API and writes them to Snowflake RAW.RAW_STOCK_PRICES.
+plus the S&P 500 index (^GSPC) as an overall-market baseline, via the public
+Yahoo Finance chart API, and writes them to Snowflake RAW.RAW_STOCK_PRICES.
 
 Usage:
     python fetch_stocks.py
@@ -11,6 +12,7 @@ import os
 import requests
 import pandas as pd
 from datetime import datetime
+from urllib.parse import quote
 import snowflake.connector
 
 # ── Config ─────────────────────────────────────────────────────────────────
@@ -25,15 +27,24 @@ SF = dict(
     schema        = "RAW",
 )
 
-TICKERS = ["MSFT", "GOOGL", "AMZN", "TSLA", "QQQ"]
+# ^GSPC (S&P 500) anchors the tech proxies to the overall market — without
+# it, a QQQ drawdown can't be read as tech-specific vs. market-wide.
+TICKERS = ["MSFT", "GOOGL", "AMZN", "TSLA", "QQQ", "^GSPC"]
+
+# Fixed history start rather than a rolling "5y" range: the analysis window
+# begins in 2020 (pre-ChatGPT baseline), and a rolling range silently loses
+# the front of that window as time passes.
+HISTORY_START = datetime(2020, 1, 1)
 
 
 def fetch_stock_data(ticker: str) -> pd.DataFrame:
-    """Fetch 5 years of daily close prices for a symbol from Yahoo Finance."""
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+    """Fetch daily close prices since HISTORY_START for a symbol from Yahoo Finance."""
+    # quote() so index symbols like ^GSPC form a valid URL path
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{quote(ticker)}"
     params = {
         "interval": "1d",
-        "range": "5y",
+        "period1": int(HISTORY_START.timestamp()),
+        "period2": int(datetime.now().timestamp()),
     }
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

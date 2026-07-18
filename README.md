@@ -10,10 +10,11 @@ An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI
 
 ## What it does
 
-- Ingests labor data from the **BLS** (JOLTS layoffs by industry, CPS unemployment) and **FRED** (nonfarm payrolls, initial claims) — monthly, since that's the source cadence
+- Ingests labor data from the **BLS** (JOLTS layoffs by industry, CPS unemployment) and **FRED** (nonfarm payrolls, initial claims, **CPI + core CPI inflation**, **Fed funds rate**) — monthly, since that's the source cadence
 - Scrapes tech industry layoffs directly from **Layoffs.fyi** (via Airtable shared view parsing) — daily
-- Fetches daily stock closing prices for AI/tech proxies (**MSFT**, **GOOGL**, **AMZN**, **TSLA**, and **QQQ**) from **Yahoo Finance** — daily
+- Fetches daily stock closing prices for AI/tech proxies (**MSFT**, **GOOGL**, **AMZN**, **TSLA**, **QQQ**) plus the **S&P 500** (`^GSPC`) as an overall-market baseline, from **Yahoo Finance** — daily
 - Pulls news headlines matching AI, job-loss, and tech IPO targets (**OpenAI**, **Anthropic**, **SpaceX**) from **NewsAPI** — daily
+- Backfills and refreshes the news corpus from **GDELT** and **Hacker News** — both free and keyless, with archives reaching **back to 2020**, so headline sentiment covers both sides of the ChatGPT moment (NewsAPI's free tier only reaches ~1 month back)
 - Pulls implied probabilities from **Polymarket** for recession, unemployment, AI-jobs, and IPO-related prediction markets — a market-priced fear signal, distinct from news sentiment — daily
 - Runs the corpus through **Snowflake Cortex AI** functions to classify, filter, embed, aggregate, and narrate
 - Exposes findings in a **Streamlit in Snowflake** dashboard with five analytical views
@@ -56,11 +57,11 @@ dbt's incremental materialization on `news_classified`, `news_embeddings`, and `
 ## Architecture
 
 ```
-[BLS API]  [FRED API]  [NewsAPI]  [Layoffs.fyi]  [Yahoo Finance]  [Polymarket]
-     │           │           │           │              │               │
-     ▼           ▼           ▼           ▼              ▼               ▼
+[BLS API]  [FRED API]  [NewsAPI]  [GDELT + Hacker News]  [Layoffs.fyi]  [Yahoo Finance]  [Polymarket]
+     │           │           │              │                  │              │               │
+     ▼           ▼           ▼              ▼                  ▼              ▼               ▼
               Dagster assets (dagster_project/assets/ingestion.py)
-     fetch_econ.py  fetch_news.py  fetch_layoffs.py  fetch_stocks.py  fetch_polymarket.py
+     fetch_econ.py  fetch_news.py  fetch_news_history.py  fetch_layoffs.py  fetch_stocks.py  fetch_polymarket.py
                                      │
                         LABOR_MARKET.RAW (Snowflake)
                         ├── RAW_BLS_JOLTS / RAW_BLS_CPS
@@ -80,6 +81,8 @@ dbt's incremental materialization on `news_classified`, `news_embeddings`, and `
                         ├── NEWS_IPO_CLASSIFIED                  (AI_CLASSIFY + AI_FILTER, incremental)
                         ├── LAYOFFS_FYI_CLEAN
                         ├── STOCK_MONTHLY_PERFORMANCE
+                        ├── MACRO_MONTHLY                        (inflation YoY, Fed funds, S&P 500 vs QQQ)
+                        ├── MONTHLY_NEWS_FEAR_INDEX              (fear-headline share per month, 2020+)
                         ├── MONTHLY_PREDICTION_MARKET_SENTIMENT  (Polymarket odds by category)
                         ├── MONTHLY_SENTIMENT_THEMES             (AI_AGG)
                         ├── MONTHLY_IPO_SENTIMENT                (AI_AGG)
@@ -88,7 +91,7 @@ dbt's incremental materialization on `news_classified`, `news_embeddings`, and `
                         └── HEADLINE_SEARCH                      (Cortex Search service, Dagster asset)
                                      │
                         Streamlit in Snowflake
-                        ├── Fear vs. Reality   (BLS vs. Layoffs.fyi + correlations + Polymarket recession odds)
+                        ├── Fear vs. Reality   (BLS vs. Layoffs.fyi + fear-index verdict + inflation/market context)
                         ├── Monthly Digests    (macro vs. tech-integrated narrative)
                         ├── Semantic Search    (Cortex Search)
                         ├── Sector Breakdown   (JOLTS sectors + tech stages)
@@ -104,13 +107,16 @@ dbt's incremental materialization on `news_classified`, `news_embeddings`, and `
 | BLS JOLTS | `JTS*LAY` | Monthly | Layoffs and discharges by industry |
 | BLS CPS | `LNS14000000`, `LNS11300000` | Monthly | Unemployment rate, labor force participation |
 | FRED | `UNRATE`, `PAYEMS` | Monthly | Unemployment, nonfarm payrolls |
+| FRED | `CPIAUCSL`, `CPILFESL`, `FEDFUNDS` | Monthly | Headline CPI, core CPI, effective Fed funds rate — the business-cycle controls |
 | FRED | `ICSA` | Weekly | Initial jobless claims |
-| NewsAPI | Various | Daily | Headlines matching AI + labor market + IPO targets |
+| NewsAPI | Various | Daily | Fresh headlines matching AI + labor market + IPO targets (~1 month of history on the free tier) |
+| GDELT DOC 2.0 | AI / layoffs / IPO queries | Daily + backfill | Global news headlines, searchable back to 2017 — provides the 2020+ archive NewsAPI can't |
+| Hacker News (Algolia) | AI / layoffs / IPO queries | Daily + backfill | Tech community stories back to 2006 — practitioner-level sentiment |
 | Layoffs.fyi | Airtable view | Daily | Specific tech company layoff dates and employee counts |
-| Yahoo Finance | MSFT, GOOGL, AMZN, TSLA, QQQ | Daily | Tech proxies and index daily close prices |
+| Yahoo Finance | MSFT, GOOGL, AMZN, TSLA, QQQ, ^GSPC | Daily | Tech proxies plus the S&P 500 overall-market baseline, daily close prices since 2020 |
 | Polymarket | Recession, unemployment, AI-jobs, IPO markets | Daily | Implied probability — what people are betting on, not just saying |
 
-No API key is required for Yahoo Finance, Layoffs.fyi, or Polymarket's Gamma API — all are public, unauthenticated endpoints.
+No API key is required for Yahoo Finance, Layoffs.fyi, GDELT, Hacker News, or Polymarket's Gamma API — all are public, unauthenticated endpoints.
 
 ---
 
@@ -165,6 +171,7 @@ uv run ingestion/fetch_econ.py
 uv run ingestion/fetch_layoffs.py
 uv run ingestion/fetch_stocks.py
 uv run ingestion/fetch_news.py
+uv run ingestion/fetch_news_history.py --backfill   # GDELT + HN archive since 2020 (one-time, ~10 min)
 uv run ingestion/fetch_polymarket.py
 ```
 
@@ -188,6 +195,7 @@ uv run ingestion/fetch_econ.py
 uv run ingestion/fetch_layoffs.py
 uv run ingestion/fetch_stocks.py
 uv run ingestion/fetch_news.py
+uv run ingestion/fetch_news_history.py   # last 7 days; add --backfill once for 2020+ history
 uv run ingestion/fetch_polymarket.py
 
 uv run dbt run --project-dir dbt --profiles-dir dbt
@@ -212,6 +220,12 @@ OpenAI, Anthropic, and SpaceX are private. We use key public investor stocks (MS
 **Why scrape the Airtable view for Layoffs.fyi?**
 Layoffs.fyi is managed in an Airtable base. Since there is no public API key provided, we dynamically query their embed page, extract the dynamic view identifier (`viw*`), and fetch the raw CSV directly to ensure data fidelity.
 
+**Why GDELT + Hacker News for news history?**
+The project's main question — *do the numbers back up the fear?* — needs headline sentiment from **before** ChatGPT (Nov 2022) to have a baseline, and NewsAPI's free tier only reaches ~1 month back. GDELT's DOC 2.0 API searches global news coverage back to 2017 and Hacker News (via Algolia) reaches back to 2006; both are free and keyless. `fetch_news_history.py --backfill` walks month-by-month windows from 2020-01, writing into the same `RAW_NEWS_HEADLINES` table (deduped by URL hash), so the existing incremental Cortex models classify the backfill without any schema change. **Cost note:** the first dbt run after a backfill classifies the whole 2020+ corpus — expect a one-time Cortex credit spend proportional to the number of new headlines; subsequent runs are incremental again.
+
+**Why add inflation, the Fed funds rate, and the S&P 500?**
+They're the control variables. Layoffs that track the 2022–23 inflation spike and rate-hike cycle are a business-cycle story, not an AI story — without CPI and `FEDFUNDS` in the same mart (`MACRO_MONTHLY`), the dashboard couldn't distinguish the two. Likewise, `^GSPC` anchors the tech proxies: a QQQ drawdown that matches the S&P 500 is market-wide, not tech-specific.
+
 **Why Polymarket?**
 News sentiment captures what people *say*; prediction markets capture what people are willing to *bet money on*. Adding implied probabilities for recession, unemployment, and AI-jobs questions gives the "fear vs. reality" thesis a market-priced data point alongside stock returns and headline classification.
 
@@ -225,4 +239,4 @@ News sentiment captures what people *say*; prediction markets capture what peopl
 
 ## Stack
 
-Snowflake · Cortex AI · Dagster · dbt · Streamlit in Snowflake · Python · BLS API · FRED API · NewsAPI · Yahoo Finance · Layoffs.fyi · Polymarket
+Snowflake · Cortex AI · Dagster · dbt · Streamlit in Snowflake · Python · BLS API · FRED API · NewsAPI · GDELT · Hacker News · Yahoo Finance · Layoffs.fyi · Polymarket

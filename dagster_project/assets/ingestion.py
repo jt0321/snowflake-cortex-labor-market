@@ -14,6 +14,7 @@ import fetch_econ
 import fetch_layoffs
 import fetch_stocks
 import fetch_news
+import fetch_news_history
 import fetch_polymarket
 
 
@@ -47,6 +48,17 @@ def raw_layoffs_fyi(context: AssetExecutionContext) -> None:
 def raw_news_headlines(context: AssetExecutionContext) -> None:
     fetch_news.main(argv=[])
     context.log.info("raw_news_headlines ingestion complete")
+
+
+@asset(
+    group_name="ingestion_daily",
+    description="News headlines from GDELT + Hacker News (keyless; last 7 days incrementally — "
+                "run `fetch_news_history.py --backfill` once for 2020+ history)",
+    tags={"schedule": "daily"},
+)
+def raw_news_history(context: AssetExecutionContext) -> None:
+    fetch_news_history.main(argv=[])
+    context.log.info("raw_news_history ingestion complete")
 
 
 @asset(

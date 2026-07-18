@@ -46,8 +46,18 @@ BLS_JOLTS_SERIES = [
 # CPS: unemployment rate + labor force participation
 BLS_CPS_SERIES = ["LNS14000000", "LNS11300000"]
 
-# FRED series
-FRED_SERIES = ["UNRATE", "PAYEMS", "ICSA"]   # unemployment, payrolls, initial claims
+# FRED series — labor market plus the broader macro picture: without
+# inflation and the policy rate alongside unemployment, layoffs can't be
+# separated from ordinary business-cycle noise (e.g. the 2022-23 rate-hike
+# cycle) when asking whether AI is what's moving the labor market.
+FRED_SERIES = [
+    "UNRATE",     # unemployment rate
+    "PAYEMS",     # nonfarm payrolls
+    "ICSA",       # weekly initial jobless claims
+    "CPIAUCSL",   # CPI, all items (headline inflation)
+    "CPILFESL",   # CPI less food & energy (core inflation)
+    "FEDFUNDS",   # effective federal funds rate
+]
 
 
 # ── BLS ────────────────────────────────────────────────────────────────────

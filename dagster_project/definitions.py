@@ -3,8 +3,8 @@ from dagster_dbt import DbtCliResource
 
 from dagster_project.resources import dbt_resource
 from dagster_project.assets.ingestion import (
-    raw_stock_prices, raw_layoffs_fyi, raw_news_headlines, raw_polymarket_markets,
-    raw_fred_icsa, raw_econ_monthly,
+    raw_stock_prices, raw_layoffs_fyi, raw_news_headlines, raw_news_history,
+    raw_polymarket_markets, raw_fred_icsa, raw_econ_monthly,
 )
 from dagster_project.assets.dbt_assets import (
     dbt_transforms, cortex_search_service,
@@ -19,6 +19,7 @@ defs = Definitions(
         raw_stock_prices,
         raw_layoffs_fyi,
         raw_news_headlines,
+        raw_news_history,
         raw_polymarket_markets,
         raw_fred_icsa,
         raw_econ_monthly,

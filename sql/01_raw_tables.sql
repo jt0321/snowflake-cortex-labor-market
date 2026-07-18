@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS RAW_BLS_CPS (
   loaded_at       TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 );
 
--- FRED series — UNRATE, PAYEMS, ICSA (initial claims)
+-- FRED series — UNRATE, PAYEMS, ICSA (initial claims),
+-- CPIAUCSL/CPILFESL (headline/core CPI), FEDFUNDS (policy rate)
 CREATE TABLE IF NOT EXISTS RAW_FRED_SERIES (
   series_id        VARCHAR,   -- e.g. UNRATE
   observation_date DATE,
@@ -35,7 +36,7 @@ CREATE TABLE IF NOT EXISTS RAW_FRED_SERIES (
   loaded_at        TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 );
 
--- News headlines
+-- News headlines — NewsAPI (fresh) + GDELT + Hacker News (history to 2020)
 CREATE TABLE IF NOT EXISTS RAW_NEWS_HEADLINES (
   article_id      VARCHAR,    -- MD5 of URL
   source_name     VARCHAR,
@@ -64,7 +65,7 @@ CREATE TABLE IF NOT EXISTS RAW_LAYOFFS_FYI (
   loaded_at        TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 );
 
--- Stock prices (MSFT, GOOGL, AMZN, TSLA, QQQ)
+-- Stock prices (MSFT, GOOGL, AMZN, TSLA, QQQ, ^GSPC)
 CREATE TABLE IF NOT EXISTS RAW_STOCK_PRICES (
   ticker            VARCHAR,
   observation_date  DATE,
