@@ -171,13 +171,16 @@ def rows_to_df(rows: list[dict]) -> pd.DataFrame:
             "description", "url", "published_at", "full_text",
         ])
     df = pd.DataFrame(rows).drop_duplicates("article_id")
+    df["published_at"] = pd.to_datetime(df["published_at"], errors="coerce")
+    df = df.dropna(subset=["published_at"])
     # snowflake-connector's pyformat binding doesn't accept pandas Timestamp
-    # objects — keep published_at as native datetimes in an object column.
+    # objects — and DataFrame construction converts datetimes to Timestamps.
+    # Same workaround as fetch_news.py: an explicit object-dtype Series of
+    # native datetimes, which pandas can't re-coerce.
     df["published_at"] = pd.Series(
-        [d if isinstance(d, datetime) else None for d in df["published_at"]],
-        index=df.index, dtype=object,
+        df["published_at"].dt.to_pydatetime(), index=df.index, dtype=object
     )
-    return df.dropna(subset=["published_at"])
+    return df
 
 
 def load_to_snowflake(df: pd.DataFrame, conn) -> int:
