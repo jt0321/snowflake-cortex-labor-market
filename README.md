@@ -25,19 +25,27 @@ An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI
 
 | Layer | Tool | Role |
 |---|---|---|
-| Orchestration | **Dagster** | Schedules ingestion + transforms at the cadence each source actually supports |
+| Orchestration | **Dagster** | Defines the asset graph and refresh bundles — spun up on demand to materialize, not deployed as a service |
 | Transformation | **dbt** | All `RAW` → `CORTEX` schema modeling, including incremental Cortex AI models |
 | AI compute | **Snowflake Cortex** | Classification, embedding, aggregation, narrative generation |
 
-**Why three cadences, not one.** BLS and FRED publish monthly — there's no way to make labor market surveys update faster. But stocks, layoffs, and news change daily, and Polymarket prices update continuously. Forcing everything onto a monthly refresh buries fresher signals behind the slowest one.
+**Operating model: spin up, materialize, shut down.** Dagster is not left running as a deployed service here. When the data should be refreshed, start an instance with `dagster dev`, materialize the relevant job (or just "Materialize all"), and shut it down. The three jobs below bundle assets by the cadence each source actually supports — BLS and FRED publish monthly, while stocks, layoffs, and news move daily — so they double as a menu of *what's worth refreshing* depending on how long it's been. The cron schedules are defined in `dagster_project/schedules.py` and would take over unchanged if you ever did deploy Dagster persistently; on an ad-hoc instance they simply never fire, and you trigger the jobs yourself.
 
-| Schedule | Cron | What runs |
+| Job | What it refreshes | Materialize when |
 |---|---|---|
-| **Daily** (6 AM UTC) | `0 6 * * *` | Ingest stocks, layoffs, news, Polymarket → `dbt run --select tag:daily` (incremental Cortex classification on new rows only) → refresh Cortex Search service |
-| **Weekly** (Thursday 8 AM UTC) | `0 8 * * 4` | FRED `ICSA` initial claims refresh — matches the BLS weekly release schedule |
-| **Monthly** (2nd, 9 AM UTC) | `0 9 2 * *` | Full BLS + FRED ingestion → `dbt run --select tag:monthly` (`AI_AGG` theme rollups, `AI_COMPLETE` digest regeneration) |
+| `daily_ingest_and_transform` | Stocks, layoffs, news (NewsAPI + GDELT/HN), Polymarket → `tag:daily` dbt models (incremental Cortex classification on new rows only) → Cortex Search refresh | Any refresh session — this is the default bundle |
+| `weekly_icsa_refresh` | FRED `ICSA` initial claims | It's been a week+ (BLS releases Thursdays) |
+| `monthly_econ_and_digest` | Full BLS + FRED ingestion → `tag:monthly` dbt models (`AI_AGG` theme rollups, `AI_COMPLETE` digest regeneration) | A new BLS/FRED month has landed (~the 2nd of the month) |
 
-dbt's incremental materialization on `news_classified`, `news_embeddings`, and `news_ipo_classified` means Cortex AI functions only run against headlines that haven't been classified yet — daily re-runs don't re-pay for already-processed rows.
+**Mind the news gap between sessions.** The `raw_news_history` asset only fetches the trailing 7 days (so a routine materialization can never accidentally re-crawl the archive). If more than a week has passed since your last session, fill the gap from the CLI before (or instead of) materializing it — GDELT and Hacker News archives make any gap recoverable:
+
+```bash
+uv run ingestion/fetch_news_history.py --from 2026-07-01   # since your last refresh
+```
+
+NewsAPI's free tier reaches ~1 month back, so its asset tolerates longer gaps on its own.
+
+dbt's incremental materialization on `news_classified`, `news_embeddings`, and `news_ipo_classified` means Cortex AI functions only run against headlines that haven't been classified yet — repeated refresh sessions don't re-pay for already-processed rows.
 
 ---
 
@@ -186,7 +194,15 @@ uv run dbt parse --project-dir dbt --profiles-dir dbt   # generates dbt/target/m
 uv run dagster dev -m dagster_project.definitions
 ```
 
-Open the Dagster UI, materialize assets manually for a first backfill, then let the three schedules (`daily_ingestion_and_transform`, `weekly_icsa_refresh`, `monthly_econ_and_digest`) take over.
+**First build:** run the news backfill from the CLI first (it's deliberately not part of any Dagster asset):
+
+```bash
+uv run ingestion/fetch_news_history.py --backfill   # GDELT + HN archive since 2020, one-time
+```
+
+then open the Dagster UI and **Materialize all**. Expect this first materialization to be the expensive one — it Cortex-classifies the entire backfilled 2020+ corpus in one pass. Every later run is incremental.
+
+**Routine refresh:** spin up `dagster dev`, materialize `daily_ingest_and_transform` (plus `weekly_icsa_refresh` / `monthly_econ_and_digest` if they're due — see the job table above), and shut the instance down. If it's been more than 7 days since the last session, close the news gap from the CLI first with `fetch_news_history.py --from <last-refresh-date>`.
 
 ### 4b. Run manually (no orchestrator)
 
