@@ -11,7 +11,7 @@ sources:
           - name: article_id
             tests: [not_null, unique]
       - name: RAW_STOCK_PRICES
-        description: Daily closing prices for MSFT, GOOGL, AMZN, TSLA, QQQ, and ^GSPC (S&P 500)
+        description: Daily closing prices for MSFT, GOOGL, AMZN, META, NVDA, TSLA, QQQ, and ^GSPC (S&P 500)
         columns:
           - name: ticker
             tests: [not_null]
@@ -41,7 +41,14 @@ sources:
           - name: period
             tests: [not_null]
       - name: RAW_FRED_SERIES
-        description: FRED series — UNRATE, PAYEMS, ICSA, CPIAUCSL, CPILFESL, FEDFUNDS
+        description: FRED series — UNRATE, PAYEMS, ICSA, CPIAUCSL, CPILFESL, FEDFUNDS, USINFO
+        columns:
+          - name: series_id
+            tests: [not_null]
+          - name: observation_date
+            tests: [not_null]
+      - name: RAW_JOB_POSTINGS
+        description: Indeed Hiring Lab job postings index (Feb 2020 = 100) — US_TOTAL plus per-sector series
         columns:
           - name: series_id
             tests: [not_null]

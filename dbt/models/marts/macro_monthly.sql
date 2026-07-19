@@ -15,7 +15,7 @@ with fred as (
     from {{ source('raw', 'RAW_FRED_SERIES') }}
     where value is not null
       and observation_date >= '2019-01-01'
-      and series_id in ('UNRATE', 'PAYEMS', 'FEDFUNDS', 'CPIAUCSL', 'CPILFESL')
+      and series_id in ('UNRATE', 'PAYEMS', 'FEDFUNDS', 'CPIAUCSL', 'CPILFESL', 'USINFO')
     group by 1, 2
 ),
 
@@ -26,8 +26,26 @@ pivoted as (
         max(case when series_id = 'PAYEMS'   then value end) as nonfarm_payroll_k,
         max(case when series_id = 'FEDFUNDS' then value end) as fed_funds_rate,
         max(case when series_id = 'CPIAUCSL' then value end) as cpi_index,
-        max(case when series_id = 'CPILFESL' then value end) as core_cpi_index
+        max(case when series_id = 'CPILFESL' then value end) as core_cpi_index,
+        max(case when series_id = 'USINFO'   then value end) as info_employment_k
     from fred
+    group by 1
+),
+
+-- young workers (20-24) — where entry-level displacement shows up first
+cps_youth as (
+    select month_date as month, value as youth_unemployment_rate
+    from {{ ref('stg_bls_cps') }}
+    where series_id = 'LNS14000036'
+),
+
+-- Indeed postings index (Feb 2020 = 100) — the hiring side layoffs miss
+postings as (
+    select
+        month_date as month,
+        avg(case when series_id = 'US_TOTAL' then value end)                as postings_total_idx,
+        avg(case when series_id like 'SOFTWARE%' then value end)            as postings_software_idx
+    from {{ ref('stg_job_postings') }}
     group by 1
 ),
 
@@ -53,14 +71,20 @@ market as (
 select
     i.month,
     i.unemployment_rate,
+    y.youth_unemployment_rate,
     i.nonfarm_payroll_k,
+    i.info_employment_k,
     i.fed_funds_rate,
     i.cpi_yoy_pct,
     i.core_cpi_yoy_pct,
+    p.postings_total_idx,
+    p.postings_software_idx,
     m.sp500_close,
     m.sp500_return_pct,
     m.qqq_close,
     m.qqq_return_pct
 from with_inflation i
-left join market m on i.month = m.month
+left join cps_youth y on i.month = y.month
+left join postings  p on i.month = p.month
+left join market    m on i.month = m.month
 where i.month >= '2020-01-01'

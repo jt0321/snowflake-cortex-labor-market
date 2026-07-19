@@ -5,7 +5,7 @@ from dagster import (
 )
 from dagster_project.assets.ingestion import (
     raw_stock_prices, raw_layoffs_fyi, raw_news_headlines, raw_news_history,
-    raw_polymarket_markets, raw_fred_icsa, raw_econ_monthly,
+    raw_polymarket_markets, raw_fred_icsa, raw_econ_monthly, raw_job_postings,
 )
 from dagster_project.assets.dbt_assets import (
     dbt_transforms, cortex_search_service,
@@ -32,7 +32,7 @@ daily_schedule = ScheduleDefinition(
 
 weekly_icsa_job = define_asset_job(
     name="weekly_icsa_refresh",
-    selection=AssetSelection.assets(raw_fred_icsa),
+    selection=AssetSelection.assets(raw_fred_icsa, raw_job_postings),
 )
 
 weekly_schedule = ScheduleDefinition(

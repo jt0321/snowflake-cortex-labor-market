@@ -15,6 +15,7 @@ import fetch_layoffs
 import fetch_stocks
 import fetch_news
 import fetch_news_history
+import fetch_job_postings
 import fetch_polymarket
 
 
@@ -86,6 +87,16 @@ def raw_fred_icsa(context: AssetExecutionContext) -> None:
     n = fetch_econ.load_to_snowflake(df, "RAW_FRED_SERIES", ["series_id", "observation_date"], conn)
     conn.close()
     context.log.info(f"ICSA: loaded {n} rows")
+
+
+@asset(
+    group_name="ingestion_weekly",
+    description="Indeed Hiring Lab job postings index (US total + by sector) — updates weekly",
+    tags={"schedule": "weekly"},
+)
+def raw_job_postings(context: AssetExecutionContext) -> None:
+    fetch_job_postings.main()
+    context.log.info("raw_job_postings ingestion complete")
 
 
 # ── Monthly (BLS publishes ~3 weeks after month-end) ─────────────────────

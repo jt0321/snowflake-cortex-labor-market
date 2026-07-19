@@ -10,9 +10,10 @@ An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI
 
 ## What it does
 
-- Ingests labor data from the **BLS** (JOLTS layoffs by industry, CPS unemployment) and **FRED** (nonfarm payrolls, initial claims, **CPI + core CPI inflation**, **Fed funds rate**) — monthly, since that's the source cadence
+- Ingests labor data from the **BLS** (JOLTS layoffs by industry **plus openings, hires, and quits** — the full hiring/firing cycle; CPS unemployment incl. **young workers 20–24**) and **FRED** (nonfarm payrolls, initial claims, **CPI + core CPI inflation**, **Fed funds rate**, **information-sector employment**) — monthly, since that's the source cadence
+- Pulls the **Indeed Hiring Lab job postings index** (US total + software development) — the hiring side that layoff counts miss — weekly
 - Scrapes tech industry layoffs directly from **Layoffs.fyi** (via Airtable shared view parsing) — daily
-- Fetches daily stock closing prices for AI/tech proxies (**MSFT**, **GOOGL**, **AMZN**, **TSLA**, **QQQ**) plus the **S&P 500** (`^GSPC`) as an overall-market baseline, from **Yahoo Finance** — daily
+- Fetches daily stock closing prices for AI-exposed megacaps (**MSFT**, **GOOGL**, **AMZN**, **META**), **NVDA** as the purest public AI signal, **TSLA** (SpaceX comparable), **QQQ**, plus the **S&P 500** (`^GSPC`) as an overall-market baseline, from **Yahoo Finance** — daily
 - Pulls news headlines matching AI, job-loss, and tech IPO targets (**OpenAI**, **Anthropic**, **SpaceX**) from **NewsAPI** — daily
 - Backfills and refreshes the news corpus from **GDELT** and **Hacker News** — both free and keyless, with archives reaching **back to 2020**, so headline sentiment covers both sides of the ChatGPT moment (NewsAPI's free tier only reaches ~1 month back)
 - Pulls implied probabilities from **Polymarket** for recession, unemployment, AI-jobs, and IPO-related prediction markets — a market-priced fear signal, distinct from news sentiment — daily
@@ -34,7 +35,7 @@ An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI
 | Job | What it refreshes | Materialize when |
 |---|---|---|
 | `daily_ingest_and_transform` | Stocks, layoffs, news (NewsAPI + GDELT/HN), Polymarket → `tag:daily` dbt models (incremental Cortex classification on new rows only) → Cortex Search refresh | Any refresh session — this is the default bundle |
-| `weekly_icsa_refresh` | FRED `ICSA` initial claims | It's been a week+ (BLS releases Thursdays) |
+| `weekly_icsa_refresh` | FRED `ICSA` initial claims + Indeed Hiring Lab postings index | It's been a week+ (BLS releases Thursdays) |
 | `monthly_econ_and_digest` | Full BLS + FRED ingestion → `tag:monthly` dbt models (`AI_AGG` theme rollups, `AI_COMPLETE` digest regeneration) | A new BLS/FRED month has landed (~the 2nd of the month) |
 
 **Mind the news gap between sessions.** The `raw_news_history` asset only fetches the trailing 7 days (so a routine materialization can never accidentally re-crawl the archive). If more than a week has passed since your last session, fill the gap from the CLI before (or instead of) materializing it — GDELT and Hacker News archives make any gap recoverable:
@@ -65,11 +66,11 @@ dbt's incremental materialization on `news_classified`, `news_embeddings`, and `
 ## Architecture
 
 ```
-[BLS API]  [FRED API]  [NewsAPI]  [GDELT + Hacker News]  [Layoffs.fyi]  [Yahoo Finance]  [Polymarket]
-     │           │           │              │                  │              │               │
-     ▼           ▼           ▼              ▼                  ▼              ▼               ▼
+[BLS API]  [FRED API]  [NewsAPI]  [GDELT + Hacker News]  [Indeed Hiring Lab]  [Layoffs.fyi]  [Yahoo Finance]  [Polymarket]
+     │           │           │              │                     │                 │              │               │
+     ▼           ▼           ▼              ▼                     ▼                 ▼              ▼               ▼
               Dagster assets (dagster_project/assets/ingestion.py)
-     fetch_econ.py  fetch_news.py  fetch_news_history.py  fetch_layoffs.py  fetch_stocks.py  fetch_polymarket.py
+     fetch_econ.py  fetch_news.py  fetch_news_history.py  fetch_job_postings.py  fetch_layoffs.py  fetch_stocks.py  fetch_polymarket.py
                                      │
                         LABOR_MARKET.RAW (Snowflake)
                         ├── RAW_BLS_JOLTS / RAW_BLS_CPS
@@ -77,6 +78,7 @@ dbt's incremental materialization on `news_classified`, `news_embeddings`, and `
                         ├── RAW_NEWS_HEADLINES
                         ├── RAW_LAYOFFS_FYI
                         ├── RAW_STOCK_PRICES
+                        ├── RAW_JOB_POSTINGS
                         └── RAW_POLYMARKET_MARKETS
                                      │
                         dbt (dbt/models/) — orchestrated by Dagster's @dbt_assets
@@ -112,19 +114,20 @@ dbt's incremental materialization on `news_classified`, `news_embeddings`, and `
 
 | Source | Series / Target | Cadence | Description |
 |---|---|---|---|
-| BLS JOLTS | `JTS*LAY` | Monthly | Layoffs and discharges by industry |
-| BLS CPS | `LNS14000000`, `LNS11300000` | Monthly | Unemployment rate, labor force participation |
-| FRED | `UNRATE`, `PAYEMS` | Monthly | Unemployment, nonfarm payrolls |
+| BLS JOLTS | `JTS*LDL`, `JTS*JOL/HIL/QUL` | Monthly | Layoffs by industry, plus total openings, hires, and quits — the full cycle |
+| BLS CPS | `LNS14000000`, `LNS11300000`, `LNS14000036` | Monthly | Unemployment rate, labor force participation, young-worker (20–24) unemployment |
+| FRED | `UNRATE`, `PAYEMS`, `USINFO` | Monthly | Unemployment, nonfarm payrolls, information-sector employment |
 | FRED | `CPIAUCSL`, `CPILFESL`, `FEDFUNDS` | Monthly | Headline CPI, core CPI, effective Fed funds rate — the business-cycle controls |
+| Indeed Hiring Lab | US total + by-sector postings index | Weekly | Job postings (Feb 2020 = 100) — hiring-side signal, incl. software development |
 | FRED | `ICSA` | Weekly | Initial jobless claims |
 | NewsAPI | Various | Daily | Fresh headlines matching AI + labor market + IPO targets (~1 month of history on the free tier) |
 | GDELT DOC 2.0 | AI / layoffs / IPO queries | Daily + backfill | Global news headlines, searchable back to 2017 — provides the 2020+ archive NewsAPI can't |
 | Hacker News (Algolia) | AI / layoffs / IPO queries | Daily + backfill | Tech community stories back to 2006 — practitioner-level sentiment |
 | Layoffs.fyi | Airtable view | Daily | Specific tech company layoff dates and employee counts |
-| Yahoo Finance | MSFT, GOOGL, AMZN, TSLA, QQQ, ^GSPC | Daily | Tech proxies plus the S&P 500 overall-market baseline, daily close prices since 2020 |
+| Yahoo Finance | MSFT, GOOGL, AMZN, META, NVDA, TSLA, QQQ, ^GSPC | Daily | AI-exposed megacaps, NVDA, TSLA, tech index, and the S&P 500 baseline, daily closes since 2020 |
 | Polymarket | Recession, unemployment, AI-jobs, IPO markets | Daily | Implied probability — what people are betting on, not just saying |
 
-No API key is required for Yahoo Finance, Layoffs.fyi, GDELT, Hacker News, or Polymarket's Gamma API — all are public, unauthenticated endpoints.
+No API key is required for Yahoo Finance, Layoffs.fyi, GDELT, Hacker News, Indeed Hiring Lab, or Polymarket's Gamma API — all are public, unauthenticated endpoints. `NEWS_API_KEY` is now **optional**: NewsAPI only adds the trailing month on top of GDELT/HN, and `fetch_news.py` skips gracefully without it.
 
 ---
 
@@ -180,6 +183,7 @@ uv run ingestion/fetch_layoffs.py
 uv run ingestion/fetch_stocks.py
 uv run ingestion/fetch_news.py
 uv run ingestion/fetch_news_history.py --backfill   # GDELT + HN archive since 2020 (one-time, ~30-40 min — GDELT rate-limits to ~1 req/5s; resumable with --from if interrupted)
+uv run ingestion/fetch_job_postings.py
 uv run ingestion/fetch_polymarket.py
 ```
 
@@ -212,6 +216,7 @@ uv run ingestion/fetch_layoffs.py
 uv run ingestion/fetch_stocks.py
 uv run ingestion/fetch_news.py
 uv run ingestion/fetch_news_history.py   # last 7 days; add --backfill once for 2020+ history
+uv run ingestion/fetch_job_postings.py
 uv run ingestion/fetch_polymarket.py
 
 uv run dbt run --project-dir dbt --profiles-dir dbt
@@ -248,4 +253,4 @@ Hit a setup error? Check [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) �
 
 ## Stack
 
-Snowflake · Cortex AI · Dagster · dbt · Streamlit in Snowflake · Python · BLS API · FRED API · NewsAPI · GDELT · Hacker News · Yahoo Finance · Layoffs.fyi · Polymarket
+Snowflake · Cortex AI · Dagster · dbt · Streamlit in Snowflake · Python · BLS API · FRED API · NewsAPI · GDELT · Hacker News · Indeed Hiring Lab · Yahoo Finance · Layoffs.fyi · Polymarket

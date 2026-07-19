@@ -27,9 +27,11 @@ SF = dict(
     schema        = "RAW",
 )
 
-# ^GSPC (S&P 500) anchors the tech proxies to the overall market — without
-# it, a QQQ drawdown can't be read as tech-specific vs. market-wide.
-TICKERS = ["MSFT", "GOOGL", "AMZN", "TSLA", "QQQ", "^GSPC"]
+# AI-exposed megacaps (MSFT/GOOGL/AMZN/META), NVDA as the purest public AI
+# signal, TSLA as the SpaceX comparable, QQQ for tech broadly, and ^GSPC
+# (S&P 500) to anchor everything to the overall market — without it, a QQQ
+# drawdown can't be read as tech-specific vs. market-wide.
+TICKERS = ["MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "QQQ", "^GSPC"]
 
 # Fixed history start rather than a rolling "5y" range: the analysis window
 # begins in 2020 (pre-ChatGPT baseline), and a rolling range silently loses

@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS RAW_BLS_CPS (
 );
 
 -- FRED series — UNRATE, PAYEMS, ICSA (initial claims),
--- CPIAUCSL/CPILFESL (headline/core CPI), FEDFUNDS (policy rate)
+-- CPIAUCSL/CPILFESL (headline/core CPI), FEDFUNDS (policy rate),
+-- USINFO (information-sector employment)
 CREATE TABLE IF NOT EXISTS RAW_FRED_SERIES (
   series_id        VARCHAR,   -- e.g. UNRATE
   observation_date DATE,
@@ -65,12 +66,20 @@ CREATE TABLE IF NOT EXISTS RAW_LAYOFFS_FYI (
   loaded_at        TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 );
 
--- Stock prices (MSFT, GOOGL, AMZN, TSLA, QQQ, ^GSPC)
+-- Stock prices (MSFT, GOOGL, AMZN, META, NVDA, TSLA, QQQ, ^GSPC)
 CREATE TABLE IF NOT EXISTS RAW_STOCK_PRICES (
   ticker            VARCHAR,
   observation_date  DATE,
   close_val         FLOAT,
   loaded_at         TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
+-- Indeed Hiring Lab job postings index (Feb 2020 = 100) — US total + by sector
+CREATE TABLE IF NOT EXISTS RAW_JOB_POSTINGS (
+  series_id        VARCHAR,   -- US_TOTAL or upper-cased sector name
+  observation_date DATE,
+  value            FLOAT,     -- postings index, Feb 1 2020 = 100
+  loaded_at        TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 );
 
 -- Polymarket prediction-market probabilities (recession, unemployment, AI jobs, IPOs)

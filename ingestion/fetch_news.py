@@ -21,7 +21,9 @@ import pandas as pd
 from datetime import datetime, timedelta
 import snowflake.connector
 
-NEWS_API_KEY = os.environ["NEWS_API_KEY"]
+# Optional: NewsAPI contributes only the trailing month (~3% of the corpus)
+# now that GDELT + Hacker News carry the history — skip gracefully without it.
+NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
 SF = dict(
     account       = os.environ["SNOWFLAKE_ACCOUNT"],
     user          = os.environ["SNOWFLAKE_USER"],
@@ -129,6 +131,10 @@ def main(argv=None):
     parser.add_argument("--to",   dest="to_date",
                         default=datetime.now().strftime("%Y-%m-%d"))
     args = parser.parse_args(argv)
+
+    if not NEWS_API_KEY:
+        print("NEWS_API_KEY not set — skipping NewsAPI (GDELT + Hacker News still cover the corpus).")
+        return
 
     print(f"Fetching headlines {args.from_date} → {args.to_date}")
     conn = snowflake.connector.connect(**SF)

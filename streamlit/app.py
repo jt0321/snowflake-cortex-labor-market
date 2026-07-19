@@ -279,6 +279,38 @@ with tab1:
     st.line_chart(icsa_windowed.set_index("OBSERVATION_DATE")[["VALUE"]].rename(columns={"VALUE": "Initial Claims"}), use_container_width=True)
     st.caption("Weekly initial unemployment claims, not seasonally adjusted — the highest-frequency leading indicator available here.")
 
+    st.markdown("### The Hiring/Firing Cycle (JOLTS, thousands)")
+    jolts_cycle = session.sql("""
+        SELECT month_date AS month,
+               CASE series_id
+                 WHEN 'JTS000000000000000JOL' THEN 'Job openings'
+                 WHEN 'JTS000000000000000HIL' THEN 'Hires'
+                 WHEN 'JTS000000000000000QUL' THEN 'Quits'
+                 WHEN 'JTS000000000000000LDL' THEN 'Layoffs & discharges'
+               END AS series,
+               value AS level_k
+        FROM LABOR_MARKET.CORTEX.STG_BLS_JOLTS
+        WHERE series_id IN ('JTS000000000000000JOL', 'JTS000000000000000HIL',
+                            'JTS000000000000000QUL', 'JTS000000000000000LDL')
+        ORDER BY month
+    """).to_pandas()
+    jolts_cycle["MONTH"] = pd.to_datetime(jolts_cycle["MONTH"])
+    cycle_windowed = jolts_cycle[
+        (jolts_cycle["MONTH"].dt.date >= range_start) & (jolts_cycle["MONTH"].dt.date <= range_end)
+    ]
+    if cycle_windowed["SERIES"].nunique() <= 1:
+        st.caption("Openings/hires/quits not ingested yet — run fetch_econ.py to pull the new JOLTS series.")
+    else:
+        st.altair_chart(
+            line_chart_with_events(cycle_windowed, "MONTH", "LEVEL_K", "SERIES",
+                                   "Thousands of persons", height=340),
+            use_container_width=True,
+        )
+        st.caption(
+            "Layoffs alone can miss the story: a frozen market shows normal layoffs but collapsed "
+            "openings, hires, and quits — which is where displacement shows up first."
+        )
+
     st.divider()
 
     # Metrics row
@@ -441,10 +473,56 @@ with tab1:
                 help="Correlation between monthly fear-headline share (all sources) and Layoffs.fyi tech layoffs, over the selected range (months with ≥20 classified headlines).",
             )
             st.caption(
-                "Correlations respond to the date-range slider above; the pre/post verdict "
+                "Correlations respond to the date-range slider above; the yearly table "
                 "always uses the full record. High correlation = headline fear moves with "
                 "actual layoffs; low = tone and numbers are decoupled in this window."
             )
+
+        # ── Data-detected fear spikes, labeled by the corpus itself ────────
+        # Instead of hand-picking event dates, let the data nominate them: a
+        # spike is a month whose fear share exceeds its trailing 6-month mean
+        # by 2 standard deviations, and Cortex AI_AGG theme rollups (already
+        # generated monthly) say what the corpus was actually about.
+        s = overall["FEAR_SHARE_PCT"]
+        trailing = s.shift(1).rolling(6, min_periods=4)
+        overall["spike_baseline"] = trailing.mean()
+        spike_mask = (
+            (s > overall["spike_baseline"] + 2 * trailing.std())
+            & (overall["HEADLINE_COUNT"] >= 20)
+        )
+        spike_months = overall[spike_mask]
+
+        with st.expander(f"📌 Fear-spike months detected from the corpus ({len(spike_months)})"):
+            if spike_months.empty:
+                st.caption("No months exceed their trailing baseline by 2σ yet.")
+            else:
+                themes = pd.DataFrame()
+                try:
+                    month_list = "', '".join(
+                        m.strftime("%Y-%m-%d") for m in spike_months["MONTH"]
+                    )
+                    themes = session.sql(f"""
+                        SELECT month, theme_summary
+                        FROM LABOR_MARKET.CORTEX.MONTHLY_SENTIMENT_THEMES
+                        WHERE month IN ('{month_list}')
+                    """).to_pandas()
+                    themes["MONTH"] = pd.to_datetime(themes["MONTH"])
+                except Exception:
+                    pass  # themes are enrichment — show the spikes regardless
+
+                for _, sp in spike_months.sort_values("MONTH", ascending=False).iterrows():
+                    st.markdown(
+                        f"**{sp['MONTH']:%B %Y}** — fear share {sp['FEAR_SHARE_PCT']:.1f}% "
+                        f"(trailing baseline {sp['spike_baseline']:.1f}%)"
+                    )
+                    if not themes.empty:
+                        t = themes[themes["MONTH"] == sp["MONTH"]]
+                        if not t.empty and t.iloc[0]["THEME_SUMMARY"]:
+                            st.caption(str(t.iloc[0]["THEME_SUMMARY"])[:500])
+                st.caption(
+                    "Detection: fear share > trailing 6-month mean + 2σ, months with ≥20 "
+                    "headlines. Summaries are the AI_AGG monthly theme rollups."
+                )
 
     # ── Broader macro context: inflation, rates, overall market ──────────
     st.divider()
@@ -457,7 +535,9 @@ with tab1:
 
     macro_df = session.sql("""
         SELECT month, cpi_yoy_pct, core_cpi_yoy_pct, fed_funds_rate,
-               sp500_close, qqq_close, sp500_return_pct
+               sp500_close, qqq_close, sp500_return_pct,
+               unemployment_rate, youth_unemployment_rate,
+               postings_total_idx, postings_software_idx
         FROM LABOR_MARKET.CORTEX.MACRO_MONTHLY
         ORDER BY month
     """).to_pandas()
@@ -500,6 +580,53 @@ with tab1:
                     height=320,
                 )
                 st.caption("Cumulative return since the start of the selected range — Yahoo Finance month-end closes.")
+
+        col_m3, col_m4 = st.columns(2)
+        with col_m3:
+            st.markdown("### Job Postings (Indeed, Feb 2020 = 100)")
+            post_long = macro_windowed.melt(
+                "MONTH", value_vars=["POSTINGS_TOTAL_IDX", "POSTINGS_SOFTWARE_IDX"],
+                var_name="series", value_name="idx",
+            ).dropna(subset=["idx"])
+            if post_long.empty:
+                st.caption("No postings data yet — run fetch_job_postings.py (Indeed Hiring Lab).")
+            else:
+                post_long["series"] = post_long["series"].map({
+                    "POSTINGS_TOTAL_IDX": "All postings",
+                    "POSTINGS_SOFTWARE_IDX": "Software development",
+                })
+                st.altair_chart(
+                    line_chart_with_events(post_long, "MONTH", "idx", "series",
+                                           "Index (Feb 2020 = 100)", height=320),
+                    use_container_width=True,
+                )
+                st.caption(
+                    "The hiring side layoff counts miss entirely. A software-dev collapse "
+                    "against stable overall postings is the clearest displacement signal here."
+                )
+
+        with col_m4:
+            st.markdown("### Unemployment: Young Workers vs. Overall")
+            un_long = macro_windowed.melt(
+                "MONTH", value_vars=["YOUTH_UNEMPLOYMENT_RATE", "UNEMPLOYMENT_RATE"],
+                var_name="series", value_name="rate",
+            ).dropna(subset=["rate"])
+            if un_long.empty:
+                st.caption("Youth unemployment not ingested yet — run fetch_econ.py for the new CPS series.")
+            else:
+                un_long["series"] = un_long["series"].map({
+                    "YOUTH_UNEMPLOYMENT_RATE": "Ages 20–24",
+                    "UNEMPLOYMENT_RATE": "Overall",
+                })
+                st.altair_chart(
+                    line_chart_with_events(un_long, "MONTH", "rate", "series",
+                                           "Unemployment rate (%)", height=320),
+                    use_container_width=True,
+                )
+                st.caption(
+                    "If AI eats entry-level work, young workers diverge from the overall "
+                    "rate before anything shows in the headline number."
+                )
 
         latest_macro = macro_windowed.dropna(subset=["CPI_YOY_PCT"]).tail(1)
         mm1, mm2, mm3, mm4 = st.columns(4)

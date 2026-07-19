@@ -42,9 +42,16 @@ BLS_JOLTS_SERIES = [
     "JTS510000000000000LDL",   # information sector
     "JTS540099000000000LDL",   # professional & business services
     "JTS600000000000000LDL",   # education & health services
+    # The other side of the cycle — layoffs alone miss a frozen market
+    # (normal firing, collapsed hiring), which is where AI displacement
+    # would show up first.
+    "JTS000000000000000JOL",   # total job openings
+    "JTS000000000000000HIL",   # total hires
+    "JTS000000000000000QUL",   # total quits (worker confidence)
 ]
-# CPS: unemployment rate + labor force participation
-BLS_CPS_SERIES = ["LNS14000000", "LNS11300000"]
+# CPS: unemployment rate + labor force participation + young workers
+# (20-24) — the canonical "AI eats entry-level work" indicator
+BLS_CPS_SERIES = ["LNS14000000", "LNS11300000", "LNS14000036"]
 
 # FRED series — labor market plus the broader macro picture: without
 # inflation and the policy rate alongside unemployment, layoffs can't be
@@ -57,6 +64,7 @@ FRED_SERIES = [
     "CPIAUCSL",   # CPI, all items (headline inflation)
     "CPILFESL",   # CPI less food & energy (core inflation)
     "FEDFUNDS",   # effective federal funds rate
+    "USINFO",     # information-sector employment — direct tech-jobs measure
 ]
 
 
