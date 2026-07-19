@@ -13,6 +13,7 @@ import json
 import datetime
 import streamlit as st
 import pandas as pd
+import altair as alt
 
 
 # Get Snowflake connection (Container Runtime pattern)
@@ -37,6 +38,46 @@ def cortex_search(query, columns, filter_obj=None, limit=20):
         response = json.loads(result[0]["RESPONSE"])
         return pd.DataFrame(response.get("results", []))
     return pd.DataFrame()
+
+
+# Key dates for reading the time series: the first Fed hike tests the
+# business-cycle explanation for the 2023 layoff wave; the AI milestones
+# test the AI-fear explanation.
+EVENT_MARKERS = [
+    ("2022-03-16", "First Fed hike"),
+    ("2022-11-30", "ChatGPT"),
+    ("2023-03-14", "GPT-4"),
+]
+
+
+def line_chart_with_events(df_long, x_col, y_col, color_col, y_title, height=320):
+    """Altair multi-series line chart with dashed vertical rules at
+    EVENT_MARKERS (st.line_chart can't draw event annotations)."""
+    base = alt.Chart(df_long).mark_line().encode(
+        x=alt.X(f"{x_col}:T", title=None),
+        y=alt.Y(f"{y_col}:Q", title=y_title),
+        color=alt.Color(f"{color_col}:N", title=None, legend=alt.Legend(orient="bottom")),
+        tooltip=[
+            alt.Tooltip(f"{x_col}:T", format="%b %Y", title="Month"),
+            alt.Tooltip(f"{y_col}:Q", format=",.1f", title=y_title),
+            alt.Tooltip(f"{color_col}:N", title="Series"),
+        ],
+    ).properties(height=height)
+
+    lo, hi = df_long[x_col].min(), df_long[x_col].max()
+    events = pd.DataFrame(
+        [{"date": pd.Timestamp(d), "label": lbl} for d, lbl in EVENT_MARKERS]
+    )
+    events = events[(events["date"] >= lo) & (events["date"] <= hi)]
+    if events.empty:
+        return base
+
+    rules = alt.Chart(events).mark_rule(strokeDash=[4, 3], color="#9ca3af").encode(x="date:T")
+    labels = alt.Chart(events).mark_text(
+        angle=270, align="left", baseline="middle", dx=4, dy=-7,
+        color="#9ca3af", fontSize=11,
+    ).encode(x="date:T", y=alt.value(6), text="label:N")
+    return base + rules + labels
 
 
 # Page Setup
@@ -189,7 +230,13 @@ with tab1:
             plot_cols.append("BLS Total Layoffs (÷10)")
 
         if plot_cols:
-            st.line_chart(df_chart.set_index("month")[plot_cols], height=350)
+            layoffs_long = df_chart.melt("month", value_vars=plot_cols,
+                                         var_name="series", value_name="persons")
+            st.altair_chart(
+                line_chart_with_events(layoffs_long, "month", "persons", "series",
+                                       "Persons", height=350),
+                use_container_width=True,
+            )
         st.caption(
             "Both series in persons. BLS (entire US economy) is scaled to 1/10 actual value "
             "so both lines are visually comparable — tech layoffs are roughly 1/10 of the national total."
@@ -285,7 +332,8 @@ with tab1:
     )
 
     fear_df = session.sql("""
-        SELECT month, headline_count, fear_share_pct, ai_causal_share_pct
+        SELECT month, source_group, headline_count, fear_headline_count,
+               fear_share_pct, ai_causal_count, ai_causal_share_pct
         FROM LABOR_MARKET.CORTEX.MONTHLY_NEWS_FEAR_INDEX
         ORDER BY month
     """).to_pandas()
@@ -297,32 +345,116 @@ with tab1:
         )
     else:
         fear_df["MONTH"] = pd.to_datetime(fear_df["MONTH"])
-        fear_windowed = fear_df[
-            (fear_df["MONTH"].dt.date >= range_start) & (fear_df["MONTH"].dt.date <= range_end)
-        ]
 
+        # Overall fear line, re-aggregated from counts (never averaged from the
+        # per-source shares): the source mix shifts over time — NewsAPI only
+        # covers the trailing month — and count-weighting keeps mix changes
+        # from bending the aggregate.
+        overall = fear_df.groupby("MONTH", as_index=False)[
+            ["HEADLINE_COUNT", "FEAR_HEADLINE_COUNT", "AI_CAUSAL_COUNT"]
+        ].sum()
+        overall["FEAR_SHARE_PCT"] = overall["FEAR_HEADLINE_COUNT"] * 100.0 / overall["HEADLINE_COUNT"]
+        overall["AI_CAUSAL_SHARE_PCT"] = overall["AI_CAUSAL_COUNT"] * 100.0 / overall["HEADLINE_COUNT"]
+
+        # ── Pre vs. post ChatGPT — the direct answer to the main question ──
+        # Fixed full-history windows on purpose (the slider doesn't apply):
+        # the comparison only means something over the complete 2020+ record.
+        chatgpt_month = pd.Timestamp(2022, 11, 1)
+        # drop df_combined's own MONTH column so the merge doesn't suffix ours
+        full = overall.merge(df_combined.drop(columns=["MONTH"]),
+                             left_on="MONTH", right_on="month", how="inner")
+        pre, post = full[full["MONTH"] < chatgpt_month], full[full["MONTH"] >= chatgpt_month]
+
+        if not pre.empty and not post.empty:
+            def _pct(d, num_col):
+                return d[num_col].sum() * 100.0 / max(d["HEADLINE_COUNT"].sum(), 1)
+
+            pre_fear,   post_fear   = _pct(pre, "FEAR_HEADLINE_COUNT"), _pct(post, "FEAR_HEADLINE_COUNT")
+            pre_causal, post_causal = _pct(pre, "AI_CAUSAL_COUNT"),     _pct(post, "AI_CAUSAL_COUNT")
+            pre_lay,    post_lay    = pre["FYI_TECH_LAYOFFS"].mean(),   post["FYI_TECH_LAYOFFS"].mean()
+            pre_un,     post_un     = pre["UNEMPLOYMENT_RATE"].mean(),  post["UNEMPLOYMENT_RATE"].mean()
+
+            st.markdown("#### Pre- vs. post-ChatGPT (Nov 2022), full 2020+ record")
+            p1, p2, p3, p4 = st.columns(4)
+            p1.metric(
+                "Fear headlines", f"{post_fear:.1f}%",
+                delta=f"{post_fear - pre_fear:+.1f} pts vs pre", delta_color="inverse",
+                help="Share of headlines classified layoff/ai_fear, post-ChatGPT era vs Jan 2020–Oct 2022.",
+            )
+            p2.metric(
+                "Cite AI as job-loss cause", f"{post_causal:.1f}%",
+                delta=f"{post_causal - pre_causal:+.1f} pts vs pre", delta_color="inverse",
+                help="Share of headlines where AI/automation is cited as a contributing factor to job losses.",
+            )
+            p3.metric(
+                "Tech layoffs / month", f"{post_lay:,.0f}",
+                delta=f"{(post_lay / pre_lay - 1) * 100:+.0f}% vs pre" if pre_lay else None,
+                delta_color="inverse",
+                help="Average monthly Layoffs.fyi headcount. The pre window includes the 2020 COVID shock.",
+            )
+            p4.metric(
+                "Unemployment rate", f"{post_un:.1f}%",
+                delta=f"{post_un - pre_un:+.1f} pts vs pre", delta_color="inverse",
+                help="Average monthly unemployment rate. The pre window includes the 2020 COVID spike.",
+            )
+
+            if pre_fear > 0 and pre_lay and pre_lay > 0:
+                fear_ratio, lay_ratio = post_fear / pre_fear, post_lay / pre_lay
+                if fear_ratio > lay_ratio * 1.25:
+                    st.markdown(
+                        f"**Verdict: the fear has outrun the data.** Fear-toned coverage is "
+                        f"{fear_ratio:.1f}× its pre-ChatGPT level while actual tech layoffs are "
+                        f"{lay_ratio:.1f}× — the anxiety grew faster than the layoffs did."
+                    )
+                elif lay_ratio > fear_ratio * 1.25:
+                    st.markdown(
+                        f"**Verdict: reality moved more than the headlines.** Tech layoffs run "
+                        f"{lay_ratio:.1f}× their pre-ChatGPT level while fear-toned coverage is "
+                        f"only {fear_ratio:.1f}× — the numbers back up (and exceed) the fear."
+                    )
+                else:
+                    st.markdown(
+                        f"**Verdict: the fear roughly tracks reality.** Fear-toned coverage "
+                        f"({fear_ratio:.1f}× pre-ChatGPT) and actual tech layoffs ({lay_ratio:.1f}×) "
+                        f"moved broadly in step."
+                    )
+            st.caption(
+                "Both windows are affected by confounders — the pre window contains the COVID shock, "
+                "and the post window contains the tail of the 2022–23 rate-hike cycle (see the Fed "
+                "hike marker on the charts). Averages are count-weighted across the full corpus."
+            )
+
+        st.write(" ")
         col_f1, col_f2 = st.columns(2)
         with col_f1:
-            st.markdown("### News Fear Share (% of headlines)")
-            st.line_chart(
-                fear_windowed.set_index("MONTH")[["FEAR_SHARE_PCT", "AI_CAUSAL_SHARE_PCT"]].rename(
-                    columns={
-                        "FEAR_SHARE_PCT": "Fear headlines (%)",
-                        "AI_CAUSAL_SHARE_PCT": "Cites AI as job-loss cause (%)",
-                    }
-                ),
-                height=320,
+            st.markdown("### News Fear Share by Source (% of headlines)")
+            src_windowed = fear_df[
+                (fear_df["MONTH"].dt.date >= range_start) & (fear_df["MONTH"].dt.date <= range_end)
+            ].copy()
+            src_windowed["series"] = src_windowed["SOURCE_GROUP"].map({
+                "mainstream_press": "Mainstream press",
+                "tech_community": "Tech community (HN)",
+            }).fillna(src_windowed["SOURCE_GROUP"])
+            st.altair_chart(
+                line_chart_with_events(src_windowed.rename(columns={"FEAR_SHARE_PCT": "fear_share"}),
+                                       "MONTH", "fear_share", "series",
+                                       "Fear share (%)", height=320),
+                use_container_width=True,
             )
             st.caption(
-                "Shares, not raw counts — corpus size varies by month and source mix, "
-                "so shares measure tone rather than ingestion volume."
+                "Split by source group because the corpus mix shifts over time (NewsAPI only covers "
+                "the trailing month). Shares, not raw counts, so volume swings don't read as tone. "
+                "GDELT and Hacker News rows are classified from titles only."
             )
 
         with col_f2:
             st.markdown("### Fear vs. Reality Correlation")
+            overall_windowed = overall[
+                (overall["MONTH"].dt.date >= range_start) & (overall["MONTH"].dt.date <= range_end)
+            ]
             # Months with a thin corpus produce unstable shares — keep them on
             # the chart but out of the correlation.
-            merged = fear_windowed[fear_windowed["HEADLINE_COUNT"] >= 20].merge(
+            merged = overall_windowed[overall_windowed["HEADLINE_COUNT"] >= 20].merge(
                 df_windowed, left_on="MONTH", right_on="month", how="inner"
             )
             corr_fear_bls = merged["FEAR_SHARE_PCT"].corr(merged["BLS_TOTAL_LAYOFFS"])
@@ -332,34 +464,18 @@ with tab1:
             v1.metric(
                 "Fear vs. BLS Layoffs",
                 f"{corr_fear_bls:.2f}" if pd.notna(corr_fear_bls) else "N/A",
-                help="Correlation between monthly fear-headline share and economy-wide BLS layoffs, over the selected range (months with ≥20 classified headlines).",
+                help="Correlation between monthly fear-headline share (all sources) and economy-wide BLS layoffs, over the selected range (months with ≥20 classified headlines).",
             )
             v2.metric(
                 "Fear vs. Tech Layoffs",
                 f"{corr_fear_fyi:.2f}" if pd.notna(corr_fear_fyi) else "N/A",
-                help="Correlation between monthly fear-headline share and Layoffs.fyi tech layoffs, over the selected range (months with ≥20 classified headlines).",
+                help="Correlation between monthly fear-headline share (all sources) and Layoffs.fyi tech layoffs, over the selected range (months with ≥20 classified headlines).",
             )
-
-            best_corr = max(
-                (c for c in (corr_fear_bls, corr_fear_fyi) if pd.notna(c)), default=None
+            st.caption(
+                "Correlations respond to the date-range slider above; the pre/post verdict "
+                "always uses the full record. High correlation = headline fear moves with "
+                "actual layoffs; low = tone and numbers are decoupled in this window."
             )
-            if best_corr is None:
-                st.caption("Not enough overlapping months to compute a verdict for this range.")
-            elif best_corr >= 0.5:
-                st.markdown(
-                    "**Verdict for this window: the fear tracks reality.** Months with more "
-                    "fearful headlines are also months with more actual layoffs."
-                )
-            elif best_corr >= 0.2:
-                st.markdown(
-                    "**Verdict for this window: loosely connected.** Headline fear moves with "
-                    "layoffs only weakly — much of the tone is independent of the numbers."
-                )
-            else:
-                st.markdown(
-                    "**Verdict for this window: fear runs ahead of the data.** Headline fear "
-                    "and actual layoffs are largely decoupled in this period."
-                )
 
     # ── Broader macro context: inflation, rates, overall market ──────────
     st.divider()
@@ -502,28 +618,58 @@ with tab3:
         key="semantic_search_input"
     )
 
-    cat_filter = st.multiselect(
+    fcol1, fcol2, fcol3 = st.columns([2, 1, 1])
+    cat_filter = fcol1.multiselect(
         "Filter categories",
         ["layoff", "hiring", "ai_fear", "ai_positive", "policy", "neutral"],
         default=[],
         key="semantic_search_categories"
     )
+    source_pick = fcol2.radio(
+        "Source",
+        ["All", "Press & blogs", "Hacker News"],
+        key="semantic_search_source",
+        help="Press & blogs = GDELT + NewsAPI outlets; Hacker News = tech community stories.",
+    )
+    date_window = fcol3.date_input(
+        "Published between",
+        value=(datetime.date(2020, 1, 1), datetime.date.today()),
+        min_value=datetime.date(2020, 1, 1),
+        key="semantic_search_dates",
+    )
 
     if search_q:
-        search_filter = None
+        # Compose all active filters with @and — Cortex Search takes one
+        # filter object, not a list.
+        clauses = []
         if cat_filter:
-            search_filter = {"@or": [{"@eq": {"category": c}} for c in cat_filter]}
+            clauses.append({"@or": [{"@eq": {"category": c}} for c in cat_filter]})
+        if source_pick == "Hacker News":
+            clauses.append({"@eq": {"source_name": "Hacker News"}})
+        elif source_pick == "Press & blogs":
+            clauses.append({"@not": {"@eq": {"source_name": "Hacker News"}}})
+        if isinstance(date_window, (list, tuple)) and len(date_window) == 2:
+            d_from, d_to = date_window
+            clauses.append({"@gte": {"published_at": d_from.isoformat()}})
+            # end date is inclusive of the whole day
+            clauses.append({"@lte": {"published_at": (d_to + datetime.timedelta(days=1)).isoformat()}})
+        search_filter = clauses[0] if len(clauses) == 1 else ({"@and": clauses} if clauses else None)
 
-        results = cortex_search(
-            query=search_q,
-            columns=["full_text", "category", "published_at", "source_name", "ai_causal_flag"],
-            filter_obj=search_filter,
-            limit=20,
-        )
+        try:
+            results = cortex_search(
+                query=search_q,
+                columns=["full_text", "category", "published_at", "source_name", "ai_causal_flag"],
+                filter_obj=search_filter,
+                limit=20,
+            )
+        except Exception as e:
+            st.error(f"Search failed: {e}")
+            results = pd.DataFrame()
 
         if results.empty:
-            st.warning("No articles found matching that semantic description.")
+            st.warning("No articles found matching that semantic description and filters.")
         else:
+            st.caption(f"Top {len(results)} matches")
             for _, r in results.iterrows():
                 badge = "🔴 AI-causal" if r.get("ai_causal_flag") else ""
                 st.markdown(

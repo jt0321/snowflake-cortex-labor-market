@@ -90,7 +90,7 @@ dbt's incremental materialization on `news_classified`, `news_embeddings`, and `
                         ├── LAYOFFS_FYI_CLEAN
                         ├── STOCK_MONTHLY_PERFORMANCE
                         ├── MACRO_MONTHLY                        (inflation YoY, Fed funds, S&P 500 vs QQQ)
-                        ├── MONTHLY_NEWS_FEAR_INDEX              (fear-headline share per month, 2020+)
+                        ├── MONTHLY_NEWS_FEAR_INDEX              (fear share per month × source group, 2020+)
                         ├── MONTHLY_PREDICTION_MARKET_SENTIMENT  (Polymarket odds by category)
                         ├── MONTHLY_SENTIMENT_THEMES             (AI_AGG)
                         ├── MONTHLY_IPO_SENTIMENT                (AI_AGG)
