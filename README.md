@@ -230,26 +230,19 @@ Hit a setup error? Check [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) �
 
 ## Design notes
 
-**Why use tech proxies for private companies?**
-OpenAI, Anthropic, and SpaceX are private. We use key public investor stocks (MSFT for OpenAI, GOOGL/AMZN for Anthropic) and related tech stock indicators (TSLA, QQQ) to serve as public market comparables and baseline indicators of valuation sentiment.
+**Tech proxies for private companies** — OpenAI, Anthropic, and SpaceX are private, so MSFT, GOOGL/AMZN, TSLA, and QQQ stand in as rough public comparables. Imperfect by construction.
 
-**Why scrape the Airtable view for Layoffs.fyi?**
-Layoffs.fyi is managed in an Airtable base. Since there is no public API key provided, we dynamically query their embed page, extract the dynamic view identifier (`viw*`), and fetch the raw CSV directly to ensure data fidelity.
+**Layoffs.fyi via Airtable scrape** — no public API, so the script extracts the shared view ID from the embed page and pulls the CSV directly.
 
-**Why GDELT + Hacker News for news history?**
-The project's main question — *do the numbers back up the fear?* — needs headline sentiment from **before** ChatGPT (Nov 2022) to have a baseline, and NewsAPI's free tier only reaches ~1 month back. GDELT's DOC 2.0 API searches global news coverage back to 2017 and Hacker News (via Algolia) reaches back to 2006; both are free and keyless. `fetch_news_history.py --backfill` walks month-by-month windows from 2020-01, writing into the same `RAW_NEWS_HEADLINES` table (deduped by URL hash), so the existing incremental Cortex models classify the backfill without any schema change. **Cost note:** the first dbt run after a backfill classifies the whole 2020+ corpus — expect a one-time Cortex credit spend proportional to the number of new headlines; subsequent runs are incremental again.
+**GDELT + Hacker News for history** — NewsAPI's free tier reaches ~1 month back; GDELT and HN are keyless with archives past 2020, giving the fear index a pre-ChatGPT baseline. Backfill writes into the same table, deduped by URL hash. First dbt run after a backfill classifies the whole new corpus — a one-time Cortex credit spend.
 
-**Why add inflation, the Fed funds rate, and the S&P 500?**
-They're the control variables. Layoffs that track the 2022–23 inflation spike and rate-hike cycle are a business-cycle story, not an AI story — without CPI and `FEDFUNDS` in the same mart (`MACRO_MONTHLY`), the dashboard couldn't distinguish the two. Likewise, `^GSPC` anchors the tech proxies: a QQQ drawdown that matches the S&P 500 is market-wide, not tech-specific.
+**Inflation, Fed funds, S&P 500** — business-cycle controls: layoffs that track rate hikes aren't an AI story, and a QQQ drawdown that matches the S&P isn't tech-specific.
 
-**Why Polymarket?**
-News sentiment captures what people *say*; prediction markets capture what people are willing to *bet money on*. Adding implied probabilities for recession, unemployment, and AI-jobs questions gives the "fear vs. reality" thesis a market-priced data point alongside stock returns and headline classification.
+**Polymarket** — an experimental side signal (what people bet vs. what they say). Relevant markets are sparse and sometimes illiquid; treat it as garnish, not evidence.
 
-**Why dbt incremental models for Cortex AI tables?**
-`AI_CLASSIFY`, `AI_FILTER`, and `AI_EMBED` cost Cortex credits per row. Daily re-runs would re-classify the entire headline history every time without incremental materialization — `is_incremental()` filters to only unclassified `article_id`s.
+**dbt incremental for Cortex tables** — AI functions cost credits per row; `is_incremental()` limits daily runs to unclassified `article_id`s.
 
-**Why is the Cortex Search service creation a Dagster asset instead of a dbt model?**
-`CREATE OR REPLACE CORTEX SEARCH SERVICE` is DDL, not a `SELECT` statement, so it can't be a dbt model. It runs as a plain Python asset (`dagster_project/assets/dbt_assets.py::cortex_search_service`) that depends on `news_embeddings` completing first.
+**Cortex Search as a Dagster asset** — `CREATE CORTEX SEARCH SERVICE` is DDL, not a `SELECT`, so it can't be a dbt model; a Python asset runs it after `news_embeddings`.
 
 ---
 

@@ -356,72 +356,41 @@ with tab1:
         overall["FEAR_SHARE_PCT"] = overall["FEAR_HEADLINE_COUNT"] * 100.0 / overall["HEADLINE_COUNT"]
         overall["AI_CAUSAL_SHARE_PCT"] = overall["AI_CAUSAL_COUNT"] * 100.0 / overall["HEADLINE_COUNT"]
 
-        # ── Pre vs. post ChatGPT — the direct answer to the main question ──
-        # Fixed full-history windows on purpose (the slider doesn't apply):
-        # the comparison only means something over the complete 2020+ record.
-        chatgpt_month = pd.Timestamp(2022, 11, 1)
+        # ── The yearly picture — no single cliff date ──────────────────────
+        # AI anxiety didn't switch on at one moment: ChatGPT (late 2022),
+        # GPT-4 (2023), and the coding-agent wave (2025) each moved it.
+        # Yearly aggregates over the full record show the trend without
+        # anchoring a verdict to any one event; the slider doesn't apply here.
         # drop df_combined's own MONTH column so the merge doesn't suffix ours
         full = overall.merge(df_combined.drop(columns=["MONTH"]),
                              left_on="MONTH", right_on="month", how="inner")
-        pre, post = full[full["MONTH"] < chatgpt_month], full[full["MONTH"] >= chatgpt_month]
-
-        if not pre.empty and not post.empty:
-            def _pct(d, num_col):
-                return d[num_col].sum() * 100.0 / max(d["HEADLINE_COUNT"].sum(), 1)
-
-            pre_fear,   post_fear   = _pct(pre, "FEAR_HEADLINE_COUNT"), _pct(post, "FEAR_HEADLINE_COUNT")
-            pre_causal, post_causal = _pct(pre, "AI_CAUSAL_COUNT"),     _pct(post, "AI_CAUSAL_COUNT")
-            pre_lay,    post_lay    = pre["FYI_TECH_LAYOFFS"].mean(),   post["FYI_TECH_LAYOFFS"].mean()
-            pre_un,     post_un     = pre["UNEMPLOYMENT_RATE"].mean(),  post["UNEMPLOYMENT_RATE"].mean()
-
-            st.markdown("#### Pre- vs. post-ChatGPT (Nov 2022), full 2020+ record")
-            p1, p2, p3, p4 = st.columns(4)
-            p1.metric(
-                "Fear headlines", f"{post_fear:.1f}%",
-                delta=f"{post_fear - pre_fear:+.1f} pts vs pre", delta_color="inverse",
-                help="Share of headlines classified layoff/ai_fear, post-ChatGPT era vs Jan 2020–Oct 2022.",
+        if not full.empty:
+            yearly = (
+                full.assign(year=full["MONTH"].dt.year)
+                .groupby("year")
+                .agg(
+                    headlines=("HEADLINE_COUNT", "sum"),
+                    fear=("FEAR_HEADLINE_COUNT", "sum"),
+                    causal=("AI_CAUSAL_COUNT", "sum"),
+                    tech_layoffs_mo=("FYI_TECH_LAYOFFS", "mean"),
+                    unemployment=("UNEMPLOYMENT_RATE", "mean"),
+                )
+                .reset_index()
             )
-            p2.metric(
-                "Cite AI as job-loss cause", f"{post_causal:.1f}%",
-                delta=f"{post_causal - pre_causal:+.1f} pts vs pre", delta_color="inverse",
-                help="Share of headlines where AI/automation is cited as a contributing factor to job losses.",
-            )
-            p3.metric(
-                "Tech layoffs / month", f"{post_lay:,.0f}",
-                delta=f"{(post_lay / pre_lay - 1) * 100:+.0f}% vs pre" if pre_lay else None,
-                delta_color="inverse",
-                help="Average monthly Layoffs.fyi headcount. The pre window includes the 2020 COVID shock.",
-            )
-            p4.metric(
-                "Unemployment rate", f"{post_un:.1f}%",
-                delta=f"{post_un - pre_un:+.1f} pts vs pre", delta_color="inverse",
-                help="Average monthly unemployment rate. The pre window includes the 2020 COVID spike.",
-            )
-
-            if pre_fear > 0 and pre_lay and pre_lay > 0:
-                fear_ratio, lay_ratio = post_fear / pre_fear, post_lay / pre_lay
-                if fear_ratio > lay_ratio * 1.25:
-                    st.markdown(
-                        f"**Verdict: the fear has outrun the data.** Fear-toned coverage is "
-                        f"{fear_ratio:.1f}× its pre-ChatGPT level while actual tech layoffs are "
-                        f"{lay_ratio:.1f}× — the anxiety grew faster than the layoffs did."
-                    )
-                elif lay_ratio > fear_ratio * 1.25:
-                    st.markdown(
-                        f"**Verdict: reality moved more than the headlines.** Tech layoffs run "
-                        f"{lay_ratio:.1f}× their pre-ChatGPT level while fear-toned coverage is "
-                        f"only {fear_ratio:.1f}× — the numbers back up (and exceed) the fear."
-                    )
-                else:
-                    st.markdown(
-                        f"**Verdict: the fear roughly tracks reality.** Fear-toned coverage "
-                        f"({fear_ratio:.1f}× pre-ChatGPT) and actual tech layoffs ({lay_ratio:.1f}×) "
-                        f"moved broadly in step."
-                    )
+            yearly_display = pd.DataFrame({
+                "Year": yearly["year"].astype(str),
+                "Headlines": yearly["headlines"].map("{:,.0f}".format),
+                "Fear share %": (yearly["fear"] * 100.0 / yearly["headlines"]).round(1),
+                "AI-causal %": (yearly["causal"] * 100.0 / yearly["headlines"]).round(1),
+                "Tech layoffs / mo": yearly["tech_layoffs_mo"].map("{:,.0f}".format),
+                "Avg unemployment %": yearly["unemployment"].round(1),
+            })
+            st.markdown("#### The yearly picture (full record)")
+            st.dataframe(yearly_display, hide_index=True, use_container_width=True)
             st.caption(
-                "Both windows are affected by confounders — the pre window contains the COVID shock, "
-                "and the post window contains the tail of the 2022–23 rate-hike cycle (see the Fed "
-                "hike marker on the charts). Averages are count-weighted across the full corpus."
+                "Fear and AI-causal shares are count-weighted across all sources for each year. "
+                "The current year is partial. 2020 reflects the COVID shock, 2022–23 overlap the "
+                "rate-hike cycle — read the trend, not any single row."
             )
 
         st.write(" ")
