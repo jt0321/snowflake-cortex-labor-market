@@ -20,12 +20,15 @@ import fetch_news_history as fnh
 
 
 class FakeResponse:
-    def __init__(self, payload=None, text=""):
+    def __init__(self, payload=None, text="", status_code=200, headers=None):
         self._payload = payload
         self.text = text
+        self.status_code = status_code
+        self.headers = headers or {}
 
     def raise_for_status(self):
-        pass
+        if self.status_code >= 400:
+            raise fnh.requests.HTTPError(f"{self.status_code} error")
 
     def json(self):
         if self._payload is None:
@@ -118,6 +121,36 @@ def test_fetch_gdelt_tolerates_non_json_response(monkeypatch):
         lambda *a, **kw: FakeResponse(payload=None, text="Timespan too short."),
     )
     assert fnh.fetch_gdelt("q", datetime(2020, 1, 1), datetime(2020, 2, 1)) == []
+
+
+def test_fetch_gdelt_retries_429_then_succeeds(monkeypatch):
+    """A 429 must be retried, not swallowed — a skipped window is silently
+    lost backfill data."""
+    responses = [FakeResponse(status_code=429), FakeResponse(GDELT_PAYLOAD)]
+    sleeps = []
+    monkeypatch.setattr(fnh.requests, "get", lambda *a, **kw: responses.pop(0))
+    monkeypatch.setattr(fnh.time, "sleep", sleeps.append)
+    rows = fnh.fetch_gdelt("q", datetime(2020, 3, 1), datetime(2020, 4, 1))
+    assert len(rows) == 1
+    assert len(sleeps) == 1 and sleeps[0] > 0
+
+
+def test_fetch_gdelt_honors_retry_after_header(monkeypatch):
+    responses = [FakeResponse(status_code=429, headers={"Retry-After": "17"}),
+                 FakeResponse(GDELT_PAYLOAD)]
+    sleeps = []
+    monkeypatch.setattr(fnh.requests, "get", lambda *a, **kw: responses.pop(0))
+    monkeypatch.setattr(fnh.time, "sleep", sleeps.append)
+    fnh.fetch_gdelt("q", datetime(2020, 3, 1), datetime(2020, 4, 1))
+    assert sleeps == [17]
+
+
+def test_fetch_gdelt_raises_after_exhausting_retries(monkeypatch):
+    import pytest
+    monkeypatch.setattr(fnh.requests, "get", lambda *a, **kw: FakeResponse(status_code=429))
+    monkeypatch.setattr(fnh.time, "sleep", lambda s: None)
+    with pytest.raises(fnh.requests.HTTPError):
+        fnh.fetch_gdelt("q", datetime(2020, 3, 1), datetime(2020, 4, 1))
 
 
 def test_fetch_gdelt_sends_window_params(monkeypatch):

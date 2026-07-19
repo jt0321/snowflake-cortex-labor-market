@@ -91,11 +91,13 @@ def articles_to_df(articles: list[dict]) -> pd.DataFrame:
     df["published_at"] = pd.to_datetime(df["published_at"], utc=True, errors="coerce").dt.tz_localize(None)
     df = df.dropna(subset=["published_at"])
     # snowflake-connector's pyformat binding doesn't accept pandas Timestamp objects.
-    # Assigning an ndarray of datetime.datetime back into a column lets pandas
-    # re-infer and silently convert it right back to datetime64[ns] — wrap it in an
-    # explicit object-dtype Series so it actually sticks as native datetimes.
+    # Assigning datetime.datetime values back into a column lets pandas re-infer
+    # and silently convert them right back to datetime64[ns] — wrap them in an
+    # explicit object-dtype Series so they actually stick as native datetimes.
+    # Per-scalar conversion (not .dt.to_pydatetime()) to avoid that accessor's
+    # FutureWarning.
     df["published_at"] = pd.Series(
-        df["published_at"].dt.to_pydatetime(), index=df.index, dtype=object
+        [ts.to_pydatetime() for ts in df["published_at"]], index=df.index, dtype=object
     )
     return df
 

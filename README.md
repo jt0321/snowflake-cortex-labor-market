@@ -179,7 +179,7 @@ uv run ingestion/fetch_econ.py
 uv run ingestion/fetch_layoffs.py
 uv run ingestion/fetch_stocks.py
 uv run ingestion/fetch_news.py
-uv run ingestion/fetch_news_history.py --backfill   # GDELT + HN archive since 2020 (one-time, ~10 min)
+uv run ingestion/fetch_news_history.py --backfill   # GDELT + HN archive since 2020 (one-time, ~30-40 min — GDELT rate-limits to ~1 req/5s; resumable with --from if interrupted)
 uv run ingestion/fetch_polymarket.py
 ```
 

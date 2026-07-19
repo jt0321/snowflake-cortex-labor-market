@@ -11,6 +11,11 @@ baseline impossible. These two sources close that gap: `--backfill` walks
 month-by-month windows from 2020-01-01 so the fear-vs-reality comparison has
 history on both sides of Nov 2022.
 
+GDELT rate-limits per IP (~1 request / 5 s), so the full backfill takes on the
+order of 30-40 minutes; 429s are retried with backoff. Runs are idempotent
+(URL-hash dedup on insert), so an interrupted backfill can be resumed with
+--from set to wherever the last run's per-month progress output stopped.
+
 Usage:
     python fetch_news_history.py                 # incremental: last 7 days
     python fetch_news_history.py --backfill      # full history since 2020-01-01
@@ -45,15 +50,19 @@ BACKFILL_START = "2020-01-01"
 
 # GDELT DOC query syntax: quoted phrases, plain terms are ANDed, OR groups
 # must be parenthesized. sourcelang:english keeps the corpus classifiable.
+# Consolidated into 3 OR-group queries (not one per topic): GDELT throttles
+# per-IP at roughly 1 request / 5 seconds, so a 2020+ backfill at 7 queries
+# per month-window would take hours and draw constant 429s. The cost is the
+# shared 250-records-per-request cap across each group's topics.
 GDELT_QUERIES = [
-    '"tech layoffs" sourcelang:english',
-    '"artificial intelligence" layoffs sourcelang:english',
-    '"job displacement" sourcelang:english',
-    'automation (jobs OR workers OR workforce) sourcelang:english',
-    '"OpenAI" (IPO OR valuation) sourcelang:english',
-    '"Anthropic" (IPO OR valuation) sourcelang:english',
-    '"SpaceX" (IPO OR valuation) sourcelang:english',
+    '("tech layoffs" OR "AI layoffs" OR "job displacement") sourcelang:english',
+    '"artificial intelligence" (layoffs OR jobs OR workers OR automation) sourcelang:english',
+    '("OpenAI" OR "Anthropic" OR "SpaceX") (IPO OR valuation) sourcelang:english',
 ]
+
+# ~1 request / 5 s is the safe per-IP rate for the GDELT DOC API
+GDELT_DELAY_SECONDS = 5
+GDELT_MAX_RETRIES = 4
 
 # HN full-text search matches title + story text; keep queries targeted so
 # downstream Cortex classification credits aren't spent on noise.
@@ -69,22 +78,38 @@ HN_QUERIES = [
 
 
 # ── GDELT ──────────────────────────────────────────────────────────────────
+def _gdelt_get(params: dict) -> requests.Response:
+    """GET with backoff on 429/5xx — a skipped window is silently lost
+    backfill data, so rate limiting must be retried, not swallowed."""
+    for attempt in range(GDELT_MAX_RETRIES + 1):
+        resp = requests.get(
+            "https://api.gdeltproject.org/api/v2/doc/doc",
+            params=params, timeout=60,
+        )
+        if resp.status_code == 429 or resp.status_code >= 500:
+            if attempt == GDELT_MAX_RETRIES:
+                resp.raise_for_status()
+            retry_after = resp.headers.get("Retry-After", "")
+            wait = int(retry_after) if retry_after.isdigit() else GDELT_DELAY_SECONDS * (2 ** (attempt + 1))
+            print(f"    GDELT {resp.status_code}, backing off {wait}s "
+                  f"(attempt {attempt + 1}/{GDELT_MAX_RETRIES})")
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return resp
+
+
 def fetch_gdelt(query: str, start: datetime, end: datetime) -> list[dict]:
     """Fetch up to 250 articles for one query over one datetime window."""
-    resp = requests.get(
-        "https://api.gdeltproject.org/api/v2/doc/doc",
-        params={
-            "query":         query,
-            "mode":          "ArtList",
-            "format":        "json",
-            "maxrecords":    250,
-            "sort":          "DateDesc",
-            "startdatetime": start.strftime("%Y%m%d%H%M%S"),
-            "enddatetime":   end.strftime("%Y%m%d%H%M%S"),
-        },
-        timeout=60,
-    )
-    resp.raise_for_status()
+    resp = _gdelt_get({
+        "query":         query,
+        "mode":          "ArtList",
+        "format":        "json",
+        "maxrecords":    250,
+        "sort":          "DateDesc",
+        "startdatetime": start.strftime("%Y%m%d%H%M%S"),
+        "enddatetime":   end.strftime("%Y%m%d%H%M%S"),
+    })
     # GDELT returns plain-text error messages with HTTP 200 for malformed
     # queries or rate limiting — treat non-JSON as an empty (but logged) window.
     try:
@@ -176,9 +201,10 @@ def rows_to_df(rows: list[dict]) -> pd.DataFrame:
     # snowflake-connector's pyformat binding doesn't accept pandas Timestamp
     # objects — and DataFrame construction converts datetimes to Timestamps.
     # Same workaround as fetch_news.py: an explicit object-dtype Series of
-    # native datetimes, which pandas can't re-coerce.
+    # native datetimes, which pandas can't re-coerce. Per-scalar conversion
+    # (not .dt.to_pydatetime()) to avoid that accessor's FutureWarning.
     df["published_at"] = pd.Series(
-        df["published_at"].dt.to_pydatetime(), index=df.index, dtype=object
+        [ts.to_pydatetime() for ts in df["published_at"]], index=df.index, dtype=object
     )
     return df
 
@@ -239,9 +265,8 @@ def main(argv=None):
             try:
                 window_rows += fetch_gdelt(q, win_start, win_end)
             except requests.RequestException as e:
-                print(f"    GDELT error for {q!r}: {e}")
-            # GDELT throttles aggressive clients — stay polite
-            time.sleep(1)
+                print(f"    GDELT error for {q!r} (after retries): {e}")
+            time.sleep(GDELT_DELAY_SECONDS)
         for q in HN_QUERIES:
             try:
                 window_rows += fetch_hn(q, win_start, win_end)
