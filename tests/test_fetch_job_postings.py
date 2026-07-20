@@ -102,7 +102,9 @@ def test_load_to_snowflake_bulk_merges_on_series_and_date():
     assert "MERGE INTO RAW_JOB_POSTINGS" in src
     assert "t.series_id = s.series_id" in src
     assert "t.observation_date = s.observation_date" in src
-    assert "WHERE NOT EXISTS" not in src
+    # the old per-row guard must be gone from the executed SQL (the docstring
+    # may still mention the pattern by name)
+    assert "SELECT 1 FROM RAW_JOB_POSTINGS" not in src
 
 
 def test_load_to_snowflake_stages_native_python_types():
