@@ -93,8 +93,52 @@ def test_fetch_csv_falls_back_across_branches(monkeypatch):
     assert df.iloc[0]["indeed_job_postings_index"] == 100.0
 
 
-def test_load_to_snowflake_dedups_on_series_and_date():
+def test_load_to_snowflake_bulk_merges_on_series_and_date():
+    """~200K rows: must bulk-stage (executemany) and dedup with one MERGE
+    keyed on (series_id, observation_date) — never per-row round-trips."""
     import inspect
     src = inspect.getsource(fjp.load_to_snowflake)
-    assert "WHERE NOT EXISTS" in src
-    assert "series_id = %s" in src and "observation_date = %s" in src
+    assert "executemany" in src
+    assert "MERGE INTO RAW_JOB_POSTINGS" in src
+    assert "t.series_id = s.series_id" in src
+    assert "t.observation_date = s.observation_date" in src
+    assert "WHERE NOT EXISTS" not in src
+
+
+def test_load_to_snowflake_stages_native_python_types():
+    """The connector can't bind numpy scalars — staged rows must be
+    plain str/date/float."""
+
+    class RecordingCursor:
+        def __init__(self):
+            self.staged = []
+
+        def execute(self, sql, *a):
+            self.rowcount = 42
+            return self
+
+        def executemany(self, sql, rows):
+            self.staged.extend(rows)
+
+        def close(self):
+            pass
+
+    class FakeConn:
+        def __init__(self):
+            self._cursor = RecordingCursor()
+
+        def cursor(self):
+            return self._cursor
+
+    import datetime
+    df = pd.DataFrame({
+        "series_id": ["US_TOTAL"],
+        "observation_date": [datetime.date(2020, 2, 1)],
+        "value": pd.to_numeric(pd.Series(["101.5"])),  # numpy float64
+    })
+    conn = FakeConn()
+    inserted = fjp.load_to_snowflake(df, conn)
+    assert inserted == 42
+    (sid, obs, val), = conn._cursor.staged
+    assert type(sid) is str and type(val) is float
+    assert type(obs) is datetime.date

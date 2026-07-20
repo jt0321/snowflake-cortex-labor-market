@@ -100,21 +100,49 @@ def _normalize(df: pd.DataFrame, fixed_series: str | None) -> pd.DataFrame:
     return out[["series_id", "observation_date", "value"]]
 
 
+STAGE_CHUNK = 10000
+
+
 def load_to_snowflake(df: pd.DataFrame, conn) -> int:
-    cursor = conn.cursor()
-    sql = """
-        INSERT INTO RAW_JOB_POSTINGS (series_id, observation_date, value)
-        SELECT %s, %s, %s
-        WHERE NOT EXISTS (
-          SELECT 1 FROM RAW_JOB_POSTINGS
-          WHERE series_id = %s AND observation_date = %s
-        )
+    """Bulk-load via a temp table + one MERGE.
+
+    The per-row INSERT ... WHERE NOT EXISTS pattern the smaller fetchers use
+    is one network round-trip per row — fine for hundreds of rows, hours for
+    this source (~200K rows across 41 sectors). executemany bulk-binds the
+    staging inserts and the MERGE dedups in a single statement.
     """
-    inserted = 0
-    for row in df.itertuples(index=False):
-        cursor.execute(sql, (row.series_id, row.observation_date, row.value,
-                             row.series_id, row.observation_date))
-        inserted += cursor.rowcount
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TEMPORARY TABLE IF NOT EXISTS TMP_JOB_POSTINGS
+          (series_id VARCHAR, observation_date DATE, value FLOAT)
+    """)
+    cursor.execute("TRUNCATE TABLE TMP_JOB_POSTINGS")
+
+    # native Python types — the connector doesn't bind numpy scalars
+    rows = [(str(r.series_id), r.observation_date, float(r.value))
+            for r in df.itertuples(index=False)]
+    for i in range(0, len(rows), STAGE_CHUNK):
+        cursor.executemany(
+            "INSERT INTO TMP_JOB_POSTINGS (series_id, observation_date, value) VALUES (%s, %s, %s)",
+            rows[i:i + STAGE_CHUNK],
+        )
+        print(f"  staged {min(i + STAGE_CHUNK, len(rows)):,}/{len(rows):,} rows")
+
+    cursor.execute("""
+        MERGE INTO RAW_JOB_POSTINGS t
+        USING (
+            SELECT series_id, observation_date, value
+            FROM TMP_JOB_POSTINGS
+            QUALIFY row_number() OVER (
+              PARTITION BY series_id, observation_date ORDER BY value
+            ) = 1
+        ) s
+        ON t.series_id = s.series_id AND t.observation_date = s.observation_date
+        WHEN NOT MATCHED THEN
+          INSERT (series_id, observation_date, value)
+          VALUES (s.series_id, s.observation_date, s.value)
+    """)
+    inserted = cursor.rowcount or 0
     cursor.close()
     return inserted
 
