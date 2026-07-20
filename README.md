@@ -8,6 +8,16 @@ An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI
 
 ---
 
+## Dashboard
+
+**Macro vs. tech layoffs**
+![Macro vs. Tech Layoff Trends](assets/layoffs.png)
+
+**The hiring/firing cycle**
+![The Hiring/Firing Cycle](assets/hiring-firing.png)
+
+---
+
 ## What it does
 
 - Ingests labor data from the **BLS** (JOLTS layoffs by industry **plus openings, hires, and quits** — the full hiring/firing cycle; CPS unemployment incl. **young workers 20–24**) and **FRED** (nonfarm payrolls, initial claims, **CPI + core CPI inflation**, **Fed funds rate**, **information-sector employment**) — monthly, since that's the source cadence
