@@ -4,7 +4,7 @@
 
 ![Platform architecture](assets/system_architecture_dashboard.svg)
 
-An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI to investigate whether public anxiety about AI-driven job displacement is supported by actual economic data. BLS and FRED figures are joined with tech layoffs, stock market proxies, news sentiment, and Polymarket prediction-market odds, then analyzed using Cortex AI functions to surface correlations, classify sentiment, and generate narrative digests — orchestrated by **Dagster**, transformed by **dbt**, and surfaced in a **Streamlit in Snowflake** dashboard.
+An end-to-end data pipeline and analytics platform that uses Snowflake Cortex AI to investigate whether public anxiety about AI-driven job displacement is supported by actual economic data. BLS and FRED figures — both sides of the hiring/firing cycle, not just layoffs — are joined with tech layoffs, Indeed job postings, stock market signals, news sentiment reaching back to 2020, and Polymarket prediction-market odds, then analyzed using Cortex AI functions to surface correlations, classify sentiment, and generate narrative digests — orchestrated by **Dagster**, transformed by **dbt**, and surfaced in a **Streamlit in Snowflake** dashboard.
 
 ---
 
@@ -91,7 +91,8 @@ dbt's incremental materialization on `news_classified`, `news_embeddings`, and `
                         ├── NEWS_IPO_CLASSIFIED                  (AI_CLASSIFY + AI_FILTER, incremental)
                         ├── LAYOFFS_FYI_CLEAN
                         ├── STOCK_MONTHLY_PERFORMANCE
-                        ├── MACRO_MONTHLY                        (inflation YoY, Fed funds, S&P 500 vs QQQ)
+                        ├── MACRO_MONTHLY                        (inflation YoY, Fed funds, youth unemployment,
+                        │                                         postings indexes, S&P 500 vs QQQ)
                         ├── MONTHLY_NEWS_FEAR_INDEX              (fear share per month × source group, 2020+)
                         ├── MONTHLY_PREDICTION_MARKET_SENTIMENT  (Polymarket odds by category)
                         ├── MONTHLY_SENTIMENT_THEMES             (AI_AGG)
@@ -101,7 +102,8 @@ dbt's incremental materialization on `news_classified`, `news_embeddings`, and `
                         └── HEADLINE_SEARCH                      (Cortex Search service, Dagster asset)
                                      │
                         Streamlit in Snowflake
-                        ├── Fear vs. Reality   (BLS vs. Layoffs.fyi + fear-index verdict + inflation/market context)
+                        ├── Fear vs. Reality   (BLS vs. Layoffs.fyi + hiring/firing cycle + yearly fear index
+                        │                       + detected fear spikes + inflation/postings/market context)
                         ├── Monthly Digests    (macro vs. tech-integrated narrative)
                         ├── Semantic Search    (Cortex Search)
                         ├── Sector Breakdown   (JOLTS sectors + tech stages)
@@ -141,7 +143,7 @@ Add the `sql/` folder to a Snowflake **Workspace** (Projects → Workspaces) and
 
 ```sql
 sql/00_setup.sql      -- database, schemas, warehouse, stages
-sql/01_raw_tables.sql -- raw layer DDL (all 7 RAW tables, including Polymarket)
+sql/01_raw_tables.sql -- raw layer DDL (all 8 RAW tables; idempotent — re-run it after pulling new table definitions)
 ```
 
 `sql/02_cortex_transforms.sql` and `sql/03_ipo_market_transforms.sql` are also in that folder — see step 3 below for when (and when *not*) to run them.
@@ -153,7 +155,7 @@ uv sync
 
 cp .env.example .env
 # then fill in SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_TOKEN (programmatic access
-# token, not your login password), and the BLS/FRED/NewsAPI keys
+# token, not your login password), and the BLS/FRED keys (NEWS_API_KEY is optional)
 ```
 
 `uv run` reads env vars from the file named by `UV_ENV_FILE` (defaults to none — you must set it). Two ways to wire that up:
